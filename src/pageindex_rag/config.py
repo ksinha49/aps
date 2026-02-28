@@ -1,0 +1,51 @@
+"""Environment-driven configuration via Pydantic Settings."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic_settings import BaseSettings
+
+
+class PageIndexSettings(BaseSettings):
+    """All configuration is driven by env vars with ``PAGEINDEX_`` prefix.
+
+    Example::
+
+        export PAGEINDEX_LLM_BASE_URL=http://localhost:4000/v1
+        export PAGEINDEX_LLM_MODEL=qwen3-14b
+    """
+
+    model_config = {"env_prefix": "PAGEINDEX_"}
+
+    # ── LLM backend ─────────────────────────────────────────────────
+    llm_base_url: str = "http://localhost:11434/v1"
+    llm_api_key: str = "no-key"
+    llm_model: str = "qwen3-14b"
+    llm_temperature: float = 0.0
+    llm_timeout: float = 120.0
+    llm_max_retries: int = 5
+
+    # ── Indexing ─────────────────────────────────────────────────────
+    toc_check_page_count: int = 20
+    max_pages_per_node: int = 10
+    max_tokens_per_node: int = 20_000
+    max_recursion_depth: int = 10
+    max_group_tokens: int = 20_000
+
+    # ── Node enrichment ──────────────────────────────────────────────
+    enable_node_summaries: bool = True
+    enable_medical_classification: bool = True
+    enable_doc_description: bool = False
+
+    # ── Retrieval ────────────────────────────────────────────────────
+    retrieval_max_concurrent: int = 8
+    retrieval_top_k_nodes: int = 5
+
+    # ── Persistence ──────────────────────────────────────────────────
+    index_store_path: Path = Path("./indexes")
+
+    # ── Tokenizer ────────────────────────────────────────────────────
+    tokenizer_method: Literal["approximate", "tiktoken", "transformers"] = "approximate"
+    tokenizer_model: str = "gpt-4o"

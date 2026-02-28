@@ -1,0 +1,25 @@
+{
+  "serviceName": "pageindex-rag",
+  "cluster": "${ECS_CLUSTER}",
+  "taskDefinition": "pageindex-rag",
+  "desiredCount": 2,
+  "launchType": "FARGATE",
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ["${SUBNET_1}", "${SUBNET_2}"],
+      "securityGroups": ["${SECURITY_GROUP}"],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${TARGET_GROUP_ARN}",
+      "containerName": "pageindex-rag",
+      "containerPort": 8080
+    }
+  ],
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  }
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "question_id": "demo-001",
+    "category": "demographics",
+    "question_text": "What is the patient's full name?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "demo-002",
+    "category": "demographics",
+    "question_text": "What is the patient's date of birth?",
+    "tier": 1,
+    "expected_type": "date"
+  },
+  {
+    "question_id": "emp-001",
+    "category": "employment",
+    "question_text": "What is the patient's occupation?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "emp-002",
+    "category": "employment",
+    "question_text": "What was the date of the work injury?",
+    "tier": 1,
+    "expected_type": "date"
+  },
+  {
+    "question_id": "med-001",
+    "category": "current_medications",
+    "question_text": "List all current medications with dosages",
+    "tier": 1,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "vital-001",
+    "category": "vital_signs",
+    "question_text": "What was the most recent blood pressure reading?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "lab-001",
+    "category": "lab_results",
+    "question_text": "What is the patient's HbA1c level?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "lab-002",
+    "category": "lab_results",
+    "question_text": "Is the glucose level normal or elevated?",
+    "tier": 2,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "img-001",
+    "category": "imaging_results",
+    "question_text": "What did the MRI of the lumbar spine show?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "diag-001",
+    "category": "diagnoses",
+    "question_text": "What is the primary diagnosis?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "proc-001",
+    "category": "procedures",
+    "question_text": "What surgical procedure was performed?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "func-001",
+    "category": "functional_capacity",
+    "question_text": "What functional improvements were documented in physical therapy?",
+    "tier": 2,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "prog-001",
+    "category": "prognosis",
+    "question_text": "What is the expected return-to-work timeline?",
+    "tier": 2,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "treat-001",
+    "category": "treatment_plan",
+    "question_text": "What is the current treatment plan?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "phys-001",
+    "category": "physician_opinion",
+    "question_text": "What is the physician's opinion on work-relatedness of the condition?",
+    "tier": 3,
+    "expected_type": "text"
+  }
+]

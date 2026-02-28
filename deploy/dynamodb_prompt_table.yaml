@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  DynamoDB table for pageindex-rag prompt storage.
+  Stores versioned prompt templates with business-dimension lookups via GSI.
+
+Parameters:
+  TableName:
+    Type: String
+    Default: pageindex-prompts
+    Description: Name of the DynamoDB table for prompt storage.
+
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment tag.
+
+  ProjectTag:
+    Type: String
+    Default: pageindex-rag
+    Description: Project tag applied to all resources.
+
+Resources:
+  PromptTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: dimension_key
+          AttributeType: S
+        - AttributeName: prompt_key
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      GlobalSecondaryIndexes:
+        - IndexName: dimension-lookup
+          KeySchema:
+            - AttributeName: dimension_key
+              KeyType: HASH
+            - AttributeName: prompt_key
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  TableNameOutput:
+    Description: Name of the created DynamoDB prompt table.
+    Value: !Ref PromptTable
+
+  TableArn:
+    Description: ARN of the created DynamoDB prompt table.
+    Value: !GetAtt PromptTable.Arn
+
+  DimensionLookupIndexArn:
+    Description: ARN of the dimension-lookup GSI.
+    Value: !Sub "${PromptTable.Arn}/index/dimension-lookup"

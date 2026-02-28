@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pageindex-rag
+  labels:
+    app: pageindex-rag
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pageindex-rag
+  template:
+    metadata:
+      labels:
+        app: pageindex-rag
+    spec:
+      containers:
+        - name: pageindex-rag
+          image: "${ECR_IMAGE_URI}"
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PAGEINDEX_LLM_PROVIDER
+              value: "bedrock"
+            - name: PAGEINDEX_LLM_AWS_REGION
+              value: "us-west-2"
+            - name: PAGEINDEX_PERSISTENCE_BACKEND
+              value: "s3"
+            - name: PAGEINDEX_PERSISTENCE_S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: pageindex-rag-config
+                  key: s3-bucket
+            - name: PAGEINDEX_OBSERVABILITY_ENABLE_TRACING
+              value: "true"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10

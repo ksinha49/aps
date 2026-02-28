@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pageindex-rag"
+version = "0.2.0"
+description = "Standalone vectorless RAG module using internalized PageIndex tree indexing"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "openai>=1.50.0",
+    "litellm>=1.40",
+    "strands-agents>=1.0.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "typer>=0.9.0",
+    "rich>=13.0",
+    "structlog>=23.0",
+]
+
+[project.optional-dependencies]
+tiktoken = ["tiktoken>=0.5.0"]
+transformers = ["transformers>=4.30.0"]
+bedrock = ["strands-agents-builder[bedrock]"]
+openai-model = ["strands-agents-builder[openai]"]
+ollama = ["strands-agents-builder[ollama]"]
+litellm = ["strands-agents-builder[litellm]"]
+otel = ["opentelemetry-api>=1.20", "opentelemetry-sdk>=1.20", "opentelemetry-exporter-otlp>=1.20"]
+api = ["fastapi>=0.100", "uvicorn[standard]>=0.20"]
+pdf = ["reportlab>=4.0"]
+s3 = ["boto3>=1.28"]
+dynamodb = ["boto3>=1.28"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-mock>=3.10",
+    "respx>=0.20",
+    "ruff>=0.1.0",
+    "mypy>=1.5",
+]
+
+[project.scripts]
+pageindex-rag = "pageindex_rag.cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pageindex_rag"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

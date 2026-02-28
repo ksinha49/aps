@@ -1,0 +1,44 @@
+{
+  "family": "pageindex-rag",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "pageindex-rag",
+      "image": "${ECR_IMAGE_URI}",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {"name": "PAGEINDEX_LLM_PROVIDER", "value": "bedrock"},
+        {"name": "PAGEINDEX_LLM_AWS_REGION", "value": "us-west-2"},
+        {"name": "PAGEINDEX_PERSISTENCE_BACKEND", "value": "s3"},
+        {"name": "PAGEINDEX_PERSISTENCE_S3_BUCKET", "value": "${S3_BUCKET}"},
+        {"name": "PAGEINDEX_OBSERVABILITY_ENABLE_TRACING", "value": "true"},
+        {"name": "PAGEINDEX_OBSERVABILITY_SERVICE_NAME", "value": "pageindex-rag"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/pageindex-rag",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD", "python", "/healthcheck.py"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
+      }
+    }
+  ]
+}

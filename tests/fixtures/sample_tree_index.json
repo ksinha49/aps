@@ -1,0 +1,99 @@
+{
+  "doc_id": "sample-aps-001",
+  "doc_name": "John Doe APS",
+  "doc_description": "Attending Physician Statement for John Doe, 55yo male with L4-L5 disc herniation and subsequent microdiscectomy",
+  "total_pages": 10,
+  "tree": [
+    {
+      "node_id": "0000",
+      "title": "Face Sheet",
+      "start_index": 1,
+      "end_index": 1,
+      "text": "",
+      "summary": "Patient demographics and insurance information for John Doe",
+      "content_type": "face_sheet",
+      "children": []
+    },
+    {
+      "node_id": "0001",
+      "title": "History and Physical",
+      "start_index": 2,
+      "end_index": 2,
+      "text": "",
+      "summary": "Initial evaluation documenting work injury with lower back pain and left leg radiculopathy",
+      "content_type": "progress_note",
+      "children": []
+    },
+    {
+      "node_id": "0002",
+      "title": "Progress Notes",
+      "start_index": 3,
+      "end_index": 4,
+      "text": "",
+      "summary": "Follow-up notes showing gradual improvement with physical therapy",
+      "content_type": "progress_note",
+      "children": []
+    },
+    {
+      "node_id": "0003",
+      "title": "Laboratory Report",
+      "start_index": 5,
+      "end_index": 5,
+      "text": "",
+      "summary": "CBC and CMP results showing elevated glucose and HbA1c",
+      "content_type": "lab_report",
+      "children": []
+    },
+    {
+      "node_id": "0004",
+      "title": "Imaging Report",
+      "start_index": 6,
+      "end_index": 6,
+      "text": "",
+      "summary": "MRI lumbar spine showing L4-L5 disc herniation with L5 nerve root compression",
+      "content_type": "imaging",
+      "children": []
+    },
+    {
+      "node_id": "0005",
+      "title": "Medication List",
+      "start_index": 7,
+      "end_index": 7,
+      "text": "",
+      "summary": "Current medications including pain management and chronic disease medications",
+      "content_type": "medication_list",
+      "children": []
+    },
+    {
+      "node_id": "0006",
+      "title": "Physical Therapy Notes",
+      "start_index": 8,
+      "end_index": 8,
+      "text": "",
+      "summary": "PT session 8 showing improved ROM and decreased pain levels",
+      "content_type": "therapy_note",
+      "children": []
+    },
+    {
+      "node_id": "0007",
+      "title": "Operative Report",
+      "start_index": 9,
+      "end_index": 9,
+      "text": "",
+      "summary": "L4-L5 microdiscectomy performed with successful nerve root decompression",
+      "content_type": "operative_report",
+      "children": []
+    },
+    {
+      "node_id": "0008",
+      "title": "Discharge Summary",
+      "start_index": 10,
+      "end_index": 10,
+      "text": "",
+      "summary": "Post-surgical discharge with improved symptoms and return-to-work plan",
+      "content_type": "discharge_summary",
+      "children": []
+    }
+  ],
+  "created_at": "2024-03-20T00:00:00Z"
+}
