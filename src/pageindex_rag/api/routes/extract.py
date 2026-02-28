@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from io import BytesIO
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -191,8 +192,13 @@ async def export_summary(request: ExportRequest, req: Request) -> StreamingRespo
     )
 
     if request.output_format == "pdf":
-        from pageindex_rag.formatters.pdf_formatter import PDFFormatter
-
+        try:
+            from pageindex_rag.formatters.pdf_formatter import PDFFormatter
+        except ImportError as exc:
+            raise HTTPException(
+                status_code=501,
+                detail="PDF export requires the 'pdf' extra: pip install pageindex-rag[pdf]",
+            ) from exc
         formatter = PDFFormatter(req.app.state.settings.pdf)
     else:
         from pageindex_rag.formatters.json_formatter import JSONFormatter
@@ -200,10 +206,10 @@ async def export_summary(request: ExportRequest, req: Request) -> StreamingRespo
         formatter = JSONFormatter()
 
     output_bytes = formatter.format(summary)
-    doc_id = request.summary.document_id
+    safe_doc_id = re.sub(r"[^\w\-]", "_", request.summary.document_id)
 
     return StreamingResponse(
         BytesIO(output_bytes),
         media_type=formatter.content_type,
-        headers={"Content-Disposition": f"attachment; filename=aps_summary_{doc_id}.{request.output_format}"},
+        headers={"Content-Disposition": f'attachment; filename="aps_summary_{safe_doc_id}.{request.output_format}"'},
     )

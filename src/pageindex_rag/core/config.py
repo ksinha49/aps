@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -177,10 +178,10 @@ class PDFFormattingConfig(BaseSettings):
     model_config = {"env_prefix": "PAGEINDEX_PDF_"}
 
     page_size: Literal["letter", "a4"] = "letter"
-    margin_inches: float = 0.75
+    margin_inches: float = Field(default=0.75, gt=0.0, le=3.0)
     font_family: str = "Helvetica"
-    body_font_size: int = 10
-    heading_font_size: int = 14
+    body_font_size: int = Field(default=10, ge=6, le=72)
+    heading_font_size: int = Field(default=14, ge=6, le=72)
     include_appendix: bool = True
     include_cover_page: bool = True
     company_name: str = ""

@@ -13,6 +13,8 @@ Usage::
 
 from __future__ import annotations
 
+from typing import Any
+
 from pageindex_rag.formatters.json_formatter import JSONFormatter
 from pageindex_rag.formatters.protocols import IOutputFormatter
 
@@ -23,7 +25,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> type:
+def __getattr__(name: str) -> Any:
     """Lazy-load PDFFormatter so reportlab is only imported when needed."""
     if name == "PDFFormatter":
         from pageindex_rag.formatters.pdf_formatter import PDFFormatter

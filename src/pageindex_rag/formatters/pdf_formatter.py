@@ -8,6 +8,7 @@ suitable for underwriter review.  Requires the ``pdf`` optional dependency::
 
 from __future__ import annotations
 
+import re
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -406,16 +407,17 @@ class PDFFormatter:
     def _content_width(self) -> float:
         return float(self._page_size[0]) - 2 * self._margin
 
+    _SEVERITY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+        (re.compile(r"\b(critical|severe|emergency|urgent)\b", re.IGNORECASE), "CRITICAL"),
+        (re.compile(r"\b(significant|major|elevated\s+risk)\b", re.IGNORECASE), "SIGNIFICANT"),
+        (re.compile(r"\b(moderate|borderline)\b", re.IGNORECASE), "MODERATE"),
+        (re.compile(r"\b(minor|mild|low)\b", re.IGNORECASE), "MINOR"),
+    ]
+
     @staticmethod
     def _detect_severity(text: str) -> str:
-        """Simple keyword-based severity detection from finding text."""
-        lower = text.lower()
-        if any(kw in lower for kw in ("critical", "severe", "emergency", "urgent")):
-            return "CRITICAL"
-        if any(kw in lower for kw in ("significant", "major", "elevated risk")):
-            return "SIGNIFICANT"
-        if any(kw in lower for kw in ("moderate", "borderline")):
-            return "MODERATE"
-        if any(kw in lower for kw in ("minor", "mild", "low")):
-            return "MINOR"
+        """Keyword-based severity detection using word-boundary matching."""
+        for pattern, level in PDFFormatter._SEVERITY_PATTERNS:
+            if pattern.search(text):
+                return level
         return "INFORMATIONAL"

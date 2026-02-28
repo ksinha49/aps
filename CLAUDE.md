@@ -171,6 +171,7 @@ All settings use pydantic-settings with env var prefixes:
 | `PAGEINDEX_PERSISTENCE_` | `PersistenceConfig` | Backend type, S3 bucket |
 | `PAGEINDEX_TOKENIZER_` | `TokenizerConfig` | Counter method |
 | `PAGEINDEX_OBSERVABILITY_` | `ObservabilityConfig` | Tracing, OTLP endpoint, log level |
+| `PAGEINDEX_PDF_` | `PDFFormattingConfig` | PDF output formatting (page size, fonts, watermark) |
 
 ### Deployment Targets
 
