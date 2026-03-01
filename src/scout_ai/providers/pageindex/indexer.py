@@ -84,10 +84,11 @@ class ScoutIndexer(IIngestionProvider):
             self._classifier = MedicalSectionClassifier(client)
         else:
             self._classifier = None
-        self._prompts = prompts or {}
+        self._caller_prompts = prompts
+        self._prompts = dict(prompts) if prompts else {}
 
     def _get_prompt(self, name: str) -> str:
-        """Resolve a prompt by name: injected dict first, then APS fallback."""
+        """Resolve a prompt by name: injected dict first, then registry fallback."""
         if name in self._prompts:
             return self._prompts[name]
         prompt = _default_prompt(name)
@@ -109,7 +110,12 @@ class ScoutIndexer(IIngestionProvider):
             if p.token_count is None:
                 p.token_count = self._tc.count(p.text)
 
-        log.info(f"Building index for '{doc_name}' ({len(pages)} pages)")
+        log.info(
+            "Building index for '%s' (%d pages)",
+            doc_name,
+            len(pages),
+            extra={"doc_name": doc_name, "page_count": len(pages)},
+        )
 
         # Build the tree
         tree = await self._tree_parser(pages)
@@ -151,7 +157,11 @@ class ScoutIndexer(IIngestionProvider):
         if self._classifier:
             heuristic_sections = self._classifier.detect_sections_heuristic(pages)
             if len(heuristic_sections) >= 3:
-                log.info(f"Using heuristic sections ({len(heuristic_sections)} found)")
+                log.info(
+                    "Using heuristic sections (%d found)",
+                    len(heuristic_sections),
+                    extra={"mode": "heuristic", "section_count": len(heuristic_sections)},
+                )
                 toc_items = self._heuristic_to_toc(heuristic_sections, len(pages))
                 toc_items = await self._check_title_appearances(toc_items, pages)
                 valid = [i for i in toc_items if i.get("physical_index") is not None]
@@ -676,12 +686,9 @@ Directly return JSON only."""
                 f"- {node.title} (pp. {node.start_index}-{node.end_index})"
                 + (f": {node.summary[:100]}" if node.summary else "")
             )
-        prompt = f"""Generate a one-sentence description for this medical document (APS).
-
-Document structure:
-{chr(10).join(structure_summary)}
-
-Return the description only."""
+        prompt = self._get_prompt("GENERATE_DOC_DESCRIPTION_PROMPT").format(
+            structure_summary=chr(10).join(structure_summary),
+        )
         return await self._client.complete(prompt)
 
     # ── Utility methods ──────────────────────────────────────────────

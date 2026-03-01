@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -28,6 +29,8 @@ class ScoutSettings(BaseSettings):
     llm_seed: int | None = None
     llm_timeout: float = 120.0
     llm_max_retries: int = 5
+    retry_jitter_factor: float = 0.5
+    retry_max_delay: float = 30.0
 
     # ── Indexing ─────────────────────────────────────────────────────
     toc_check_page_count: int = 20
@@ -38,7 +41,14 @@ class ScoutSettings(BaseSettings):
 
     # ── Node enrichment ──────────────────────────────────────────────
     enable_node_summaries: bool = True
-    enable_section_classification: bool = True
+    enable_section_classification: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "enable_section_classification",
+            "enable_medical_classification",
+            "SCOUT_ENABLE_MEDICAL_CLASSIFICATION",
+        ),
+    )
     enable_doc_description: bool = False
 
     # ── Retrieval ────────────────────────────────────────────────────

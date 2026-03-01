@@ -9,7 +9,7 @@ are preserved via ``__getattr__``.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -102,6 +102,65 @@ class BatchExtractionResult(BaseModel):
     category: str
     retrieval: RetrievalResult
     extractions: list[ExtractionResult] = Field(default_factory=list)
+
+
+# ── Per-run analytics ────────────────────────────────────────────────
+
+
+class StageMetrics(BaseModel):
+    """Metrics for a single pipeline stage (retrieval, extraction, etc.)."""
+
+    stage: str
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    duration_ms: float = 0.0
+    llm_calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class RunAnalytics(BaseModel):
+    """Aggregate analytics for a single pipeline run."""
+
+    run_id: str
+    doc_id: str = ""
+    started_at: datetime
+    ended_at: datetime | None = None
+    total_duration_ms: float = 0.0
+    stages: list[StageMetrics] = Field(default_factory=list)
+    total_llm_calls: int = 0
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_success: int = 0
+    total_failures: int = 0
+    errors: list[str] = Field(default_factory=list)
+    status: Literal["pending", "running", "completed", "failed", "partial"] = "pending"
+
+    def finalize(self) -> None:
+        """Aggregate totals from stage metrics and mark completed."""
+        self.ended_at = datetime.now(timezone.utc)
+        if self.started_at:
+            self.total_duration_ms = (self.ended_at - self.started_at).total_seconds() * 1000
+
+        self.total_llm_calls = sum(s.llm_calls for s in self.stages)
+        self.total_prompt_tokens = sum(s.prompt_tokens for s in self.stages)
+        self.total_completion_tokens = sum(s.completion_tokens for s in self.stages)
+        self.total_success = sum(s.success_count for s in self.stages)
+        self.total_failures = sum(s.failure_count for s in self.stages)
+
+        # Collect all stage errors
+        for s in self.stages:
+            self.errors.extend(s.errors)
+
+        if self.total_failures > 0 and self.total_success > 0:
+            self.status = "partial"
+        elif self.total_failures > 0:
+            self.status = "failed"
+        else:
+            self.status = "completed"
 
 
 # ── Backward compatibility shim ──────────────────────────────────────

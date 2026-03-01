@@ -255,6 +255,11 @@ class SynthesisPipeline:
         """Parse LLM response into an UnderwriterSummary."""
         parsed = self._client.extract_json(response)
 
+        # Handle malformed LLM output: parsed may be a list, str, or empty
+        if not isinstance(parsed, dict):
+            log.warning("Synthesis response was not a dict (got %s), using fallback", type(parsed).__name__)
+            parsed = {}
+
         total_answered = sum(
             len(batch.extractions or []) for batch in results
         )
@@ -263,22 +268,29 @@ class SynthesisPipeline:
             for batch in results
         )
 
+        raw_sections = parsed.get("sections", [])
+        if not isinstance(raw_sections, list):
+            raw_sections = []
         sections = [
             SynthesisSection(
-                title=s.get("title", ""),
-                content=s.get("content", ""),
-                source_categories=s.get("source_categories", []),
-                key_findings=s.get("key_findings", []),
+                title=s.get("title", "") if isinstance(s, dict) else str(s),
+                content=s.get("content", "") if isinstance(s, dict) else "",
+                source_categories=s.get("source_categories", []) if isinstance(s, dict) else [],
+                key_findings=s.get("key_findings", []) if isinstance(s, dict) else [],
             )
-            for s in parsed.get("sections", [])
+            for s in raw_sections
         ]
+
+        raw_risk = parsed.get("risk_factors", [])
+        if not isinstance(raw_risk, list):
+            raw_risk = []
 
         return UnderwriterSummary(
             document_id=metadata.get("doc_id", ""),
-            patient_demographics=parsed.get("patient_demographics", ""),
+            patient_demographics=str(parsed.get("patient_demographics", "") or ""),
             sections=sections,
-            risk_factors=parsed.get("risk_factors", []),
-            overall_assessment=parsed.get("overall_assessment", ""),
+            risk_factors=raw_risk,
+            overall_assessment=str(parsed.get("overall_assessment", "") or ""),
             total_questions_answered=total_answered,
             high_confidence_count=high_conf_count,
             generated_at=datetime.now(timezone.utc).isoformat(),

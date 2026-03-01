@@ -14,6 +14,8 @@ import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
+from scout_ai.exceptions import ExtractionError, LLMClientError, RetrievalError
+from scout_ai.hooks.run_tracker import get_current_run, track_stage
 from scout_ai.models import (
     BatchExtractionResult,
     DocumentIndex,
@@ -68,8 +70,17 @@ class ExtractionPipeline:
         if pages:
             page_map = {p.page_number: p.text for p in pages}
 
-        # Step 1: Category-batched retrieval
-        retrieval_results = await self._retrieval.batch_retrieve(index, questions)
+        # Step 1: Category-batched retrieval (resilient)
+        retrieval_results: dict[str, RetrievalResult] = {}
+        try:
+            with track_stage("retrieval") as stage:
+                retrieval_results = await self._retrieval.batch_retrieve(index, questions)
+                stage.success_count = len(retrieval_results)
+        except (RetrievalError, LLMClientError) as e:
+            log.error("Batch retrieval failed, degrading gracefully: %s", e)
+            run = get_current_run()
+            if run:
+                run.errors.append(f"retrieval_failed: {e}")
 
         # Step 2: Extract answers per category (str-keyed)
         by_category: dict[str, list[ExtractionQuestion]] = defaultdict(list)
@@ -94,7 +105,17 @@ class ExtractionPipeline:
                 results.append(BatchExtractionResult(category=category_str, retrieval=retrieval))
                 continue
 
-            extractions = await self._chat.extract_answers(cat_questions, context)
+            try:
+                with track_stage(f"extraction:{category_str}") as stage:
+                    extractions = await self._chat.extract_answers(cat_questions, context)
+                    stage.success_count = len(extractions)
+            except (ExtractionError, LLMClientError) as e:
+                log.error("Extraction failed for %s: %s", category_str, e)
+                extractions = []
+                run = get_current_run()
+                if run:
+                    run.errors.append(f"extraction_failed:{category_str}: {e}")
+
             results.append(
                 BatchExtractionResult(
                     category=category_str,
@@ -148,7 +169,15 @@ class ExtractionPipeline:
                 synthesis_pipeline = SynthesisPipeline(client, cache_enabled=cache_enabled)
 
             metadata = document_metadata or {"doc_id": index.doc_id, "doc_name": index.doc_name}
-            summary = await synthesis_pipeline.synthesize(batch_results, metadata)
+            try:
+                with track_stage("synthesis"):
+                    summary = await synthesis_pipeline.synthesize(batch_results, metadata)
+            except Exception as e:
+                log.error("Synthesis failed, returning None: %s", e)
+                summary = None
+                run = get_current_run()
+                if run:
+                    run.errors.append(f"synthesis_failed: {e}")
 
         return batch_results, summary, validation_report
 
@@ -194,8 +223,9 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
     """Create an ExtractionPipeline using the legacy providers.
 
     This factory uses the existing provider classes until the full
-    Strands agent migration is complete. Domain-specific prompts and
-    category descriptions are resolved from the domain registry.
+    Strands agent migration is complete. When ``settings.domain`` is
+    configured, domain-specific prompts and category descriptions are
+    injected from the domain registry into the providers.
     """
     from scout_ai.config import ScoutSettings
     from scout_ai.providers.pageindex.chat import ScoutChat
@@ -211,12 +241,29 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
         llm_seed=settings.llm.seed,
         llm_timeout=settings.llm.timeout,
         llm_max_retries=settings.llm.max_retries,
+        retry_jitter_factor=settings.llm.retry_jitter_factor,
+        retry_max_delay=settings.llm.retry_max_delay,
         retrieval_max_concurrent=settings.retrieval.max_concurrent,
         retrieval_top_k_nodes=settings.retrieval.top_k_nodes,
     )
 
+    # Resolve domain-specific prompts and categories from registry
+    category_descriptions: dict[str, str] | None = None
+    try:
+        from scout_ai.domains.registry import get_registry
+
+        domain_config = get_registry().get(settings.domain)
+        category_descriptions = domain_config.category_descriptions or None
+    except (KeyError, ImportError):
+        pass
+
     client = LLMClient(legacy_settings)
-    retrieval = ScoutRetrieval(legacy_settings, client)
-    chat = ScoutChat(legacy_settings, client)
+    retrieval = ScoutRetrieval(
+        legacy_settings,
+        client,
+        category_descriptions=category_descriptions,
+        domain=settings.domain,
+    )
+    chat = ScoutChat(legacy_settings, client, domain=settings.domain)
 
     return ExtractionPipeline(retrieval, chat)

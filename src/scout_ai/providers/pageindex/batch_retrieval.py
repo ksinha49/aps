@@ -1,7 +1,7 @@
 """Category-batched multi-question retrieval.
 
-Groups 900 questions into 16 extraction categories and runs one synthesized
-tree search per category, reducing LLM calls from 900+ to 16.
+Groups questions by extraction category and runs one synthesized tree search
+per category, reducing LLM calls from N questions to N categories.
 """
 
 from __future__ import annotations
@@ -40,12 +40,14 @@ class BatchRetrieval:
         *,
         category_descriptions: dict[str, str] | None = None,
         category_search_prompt: str | None = None,
+        domain: str = "aps",
     ) -> None:
         self._settings = settings
         self._client = client
         self._retrieval = retrieval
         self._category_descriptions = category_descriptions or {}
         self._category_search_prompt = category_search_prompt or ""
+        self._domain = domain
 
     async def batch_retrieve(
         self,
@@ -62,7 +64,10 @@ class BatchRetrieval:
             by_category[q.category].append(q)
 
         log.info(
-            f"Batch retrieval: {len(questions)} questions in {len(by_category)} categories"
+            "Batch retrieval: %d questions in %d categories",
+            len(questions),
+            len(by_category),
+            extra={"question_count": len(questions), "category_count": len(by_category)},
         )
 
         # Run one search per category with concurrency control
@@ -84,7 +89,13 @@ class BatchRetrieval:
 
         for result in raw_results:
             if isinstance(result, Exception):
-                log.warning(f"Category search failed: {result}")
+                log.warning("Category search failed: %s", result)
+                # Record in RunAnalytics if active
+                from scout_ai.hooks.run_tracker import get_current_run
+
+                run = get_current_run()
+                if run:
+                    run.errors.append(f"category_search_failed: {result}")
                 continue
             category_str, retrieval_result = result
             results[category_str] = retrieval_result
@@ -105,7 +116,7 @@ class BatchRetrieval:
         if not self._category_search_prompt:
             from scout_ai.prompts.registry import get_prompt
 
-            self._category_search_prompt = get_prompt("aps", "retrieval", "CATEGORY_SEARCH_PROMPT")
+            self._category_search_prompt = get_prompt(self._domain, "retrieval", "CATEGORY_SEARCH_PROMPT")
         prompt = self._category_search_prompt.format(
             category=category_str,
             category_description=category_desc,
@@ -116,15 +127,28 @@ class BatchRetrieval:
         response = await self._client.complete(prompt)
         parsed = self._client.extract_json(response)
 
-        node_ids = parsed.get("node_ids", [])
-        reasoning = parsed.get("reasoning", "")
+        # Handle malformed LLM output: model may return a list instead of dict
+        if isinstance(parsed, list):
+            node_ids = parsed
+            reasoning = ""
+        else:
+            node_ids = parsed.get("node_ids", [])
+            reasoning = parsed.get("reasoning", "")
+
+        # Coerce node_ids: LLM may return dicts like {"node_id": "..."} instead of strings
+        clean_ids: list[str] = []
+        for nid in node_ids:
+            if isinstance(nid, str):
+                clean_ids.append(nid)
+            elif isinstance(nid, dict) and "node_id" in nid:
+                clean_ids.append(str(nid["node_id"]))
 
         # Resolve nodes
         node_map = create_node_mapping(index.tree)
         retrieved_nodes: list[dict[str, Any]] = []
         matched_nodes = []
 
-        for nid in node_ids[: self._settings.retrieval_top_k_nodes]:
+        for nid in clean_ids[: self._settings.retrieval_top_k_nodes]:
             node = node_map.get(nid)
             if node:
                 matched_nodes.append(node)

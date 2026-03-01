@@ -56,17 +56,76 @@ try:
         Frame,
         PageBreak,
         PageTemplate,
-        Paragraph,
         SimpleDocTemplate,
         Spacer,
         Table,
         TableStyle,
+    )
+    from reportlab.platypus import (
+        Paragraph as _RawParagraph,
     )
     from reportlab.platypus.tableofcontents import TableOfContents
 except ImportError as _exc:
     raise ImportError(
         "reportlab is required for PDF output. Install with: pip install scout-ai[pdf]"
     ) from _exc
+
+
+# ── Unicode sanitization ────────────────────────────────────────────
+# Helvetica lacks glyphs for many Unicode characters that LLMs emit
+# (non-breaking hyphens, narrow spaces, smart quotes, etc.).  We
+# sanitize text at the Paragraph boundary so every flowable is safe.
+
+_UNICODE_REPLACEMENTS: dict[str, str] = {
+    # Dashes / hyphens
+    "\u2011": "-",       # non-breaking hyphen
+    "\u2010": "-",       # hyphen
+    "\u2012": "-",       # figure dash
+    "\u2013": "-",       # en-dash
+    "\u2014": "-",       # em-dash
+    "\u2015": "-",       # horizontal bar
+    # Spaces
+    "\u202f": " ",       # narrow no-break space
+    "\u00a0": " ",       # non-breaking space
+    "\u2009": " ",       # thin space
+    "\u200a": " ",       # hair space
+    # Quotes
+    "\u2018": "'",       # left single quote
+    "\u2019": "'",       # right single quote
+    "\u201c": '"',       # left double quote
+    "\u201d": '"',       # right double quote
+    # Misc punctuation
+    "\u2026": "...",     # ellipsis
+    "\u00b7": ".",       # middle dot
+    # Superscript digits (Helvetica lacks these glyphs)
+    "\u00b2": "2",       # superscript 2
+    "\u00b3": "3",       # superscript 3
+    "\u2070": "0",       # superscript 0
+    "\u00b9": "1",       # superscript 1
+    "\u2074": "4",       # superscript 4
+    "\u2075": "5",       # superscript 5
+    "\u2076": "6",       # superscript 6
+    "\u2077": "7",       # superscript 7
+    "\u2078": "8",       # superscript 8
+    "\u2079": "9",       # superscript 9
+    # Scientific symbols
+    "\u00b5": "u",       # micro sign → u (as in uL)
+    "\u00d7": "x",       # multiplication sign → x
+    "\u2192": "->",      # rightwards arrow
+    "\u2191": "^",       # upwards arrow (used for "elevated")
+    "\u2193": "v",       # downwards arrow (used for "decreased")
+}
+
+
+def _sanitize_text(text: str) -> str:
+    for char, replacement in _UNICODE_REPLACEMENTS.items():
+        text = text.replace(char, replacement)
+    return text
+
+
+def Paragraph(text: str, *args: Any, **kwargs: Any) -> _RawParagraph:  # noqa: N802
+    """Sanitized Paragraph wrapper — replaces Unicode glyphs Helvetica cannot render."""
+    return _RawParagraph(_sanitize_text(str(text)), *args, **kwargs)
 
 
 # ── Page size lookup ─────────────────────────────────────────────────
@@ -322,14 +381,41 @@ class PDFFormatter:
     # Legacy story construction (unchanged)
     # ══════════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def _build_citation_index(
+        batch_results: list[Any],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Build a category -> citation list lookup from batch extraction results."""
+        index: dict[str, list[dict[str, Any]]] = {}
+        for br in batch_results:
+            cat = br.category if hasattr(br, "category") else br.get("category", "")
+            cits: list[dict[str, Any]] = []
+            extractions = br.extractions if hasattr(br, "extractions") else br.get("extractions", [])
+            for ext in extractions:
+                ext_cits = ext.citations if hasattr(ext, "citations") else ext.get("citations", [])
+                for c in ext_cits:
+                    page = c.page_number if hasattr(c, "page_number") else c.get("page_number", 0)
+                    quote = c.verbatim_quote if hasattr(c, "verbatim_quote") else c.get("verbatim_quote", "")
+                    if page:
+                        cits.append({"page": page, "quote": quote})
+            if cits:
+                index[cat] = cits
+        return index
+
     def _build_story(self, summary: UnderwriterSummary, **kwargs: Any) -> list[Flowable]:
         story: list[Flowable] = []
+
+        # Build citation index from batch_results if available
+        citation_index: dict[str, list[dict[str, Any]]] = {}
+        if kwargs.get("batch_results"):
+            citation_index = self._build_citation_index(kwargs["batch_results"])
+
         if self._config.include_cover_page:
             story.extend(self._build_cover_page(summary))
         story.extend(self._build_executive_summary(summary))
         story.extend(self._build_risk_classification(summary))
         for section in summary.sections:
-            story.extend(self._build_section(section))
+            story.extend(self._build_section(section, citation_index))
         story.extend(self._build_risk_factors(summary))
         story.extend(self._build_overall_assessment(summary))
         if self._config.include_appendix and kwargs.get("batch_results"):
@@ -412,7 +498,11 @@ class PDFFormatter:
         items.append(Spacer(1, 10))
         return items
 
-    def _build_section(self, section: SynthesisSection) -> list[Flowable]:
+    def _build_section(
+        self,
+        section: SynthesisSection,
+        citation_index: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> list[Flowable]:
         items: list[Flowable] = [
             Paragraph(section.title, self._styles["heading"]),
             Paragraph(section.content, self._styles["body"]),
@@ -425,11 +515,25 @@ class PDFFormatter:
             )
             items.append(Paragraph(bullet, self._styles["bullet"]))
 
+        # Collect page citations for this section's source categories
+        cited_pages: set[int] = set()
+        if citation_index and section.source_categories:
+            for cat in section.source_categories:
+                for cit in citation_index.get(cat, []):
+                    cited_pages.add(cit["page"])
+
         if section.source_categories:
             cats = ", ".join(
                 CATEGORY_DISPLAY_NAMES.get(c, c) for c in section.source_categories
             )
-            items.append(Paragraph(f"Sources: {cats}", self._styles["caption"]))
+            if cited_pages:
+                page_refs = ", ".join(str(p) for p in sorted(cited_pages))
+                items.append(Paragraph(
+                    f"Sources: {cats} | Pages: {page_refs}",
+                    self._styles["caption"],
+                ))
+            else:
+                items.append(Paragraph(f"Sources: {cats}", self._styles["caption"]))
         items.append(Spacer(1, 6))
         return items
 

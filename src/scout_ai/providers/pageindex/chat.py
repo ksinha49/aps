@@ -99,6 +99,7 @@ class ScoutChat(IChatProvider):
         batch_extraction_prompt: str | None = None,
         individual_extraction_prompt: str | None = None,
         system_template: str | None = None,
+        domain: str = "aps",
     ) -> None:
         self._settings = settings
         self._client = client
@@ -106,6 +107,7 @@ class ScoutChat(IChatProvider):
         self._batch_extraction_prompt = batch_extraction_prompt or ""
         self._individual_extraction_prompt = individual_extraction_prompt or ""
         self._system_template = system_template or _DEFAULT_SYSTEM_TEMPLATE
+        self._domain = domain
 
     async def extract_answers(
         self,
@@ -165,7 +167,43 @@ Question: {query}
 Provide a detailed answer based only on the provided context."""
         return await self._client.complete(prompt)
 
-    # ── Citation helpers ────────────────────────────────────────────
+    # ── LLM output coercion helpers ──────────────────────────────────
+
+    @staticmethod
+    def _safe_answer(raw: Any) -> str:
+        """Coerce an answer value to str. Handles list answers from LLMs."""
+        if raw is None:
+            return "Not found"
+        if isinstance(raw, str):
+            return raw
+        if isinstance(raw, list):
+            return ", ".join(str(item) for item in raw)
+        return str(raw)
+
+    @staticmethod
+    def _safe_confidence(raw: Any) -> float:
+        """Coerce a confidence value to float in [0, 1]."""
+        try:
+            return min(max(float(raw), 0.0), 1.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def _safe_page_number(raw: Any) -> int:
+        """Coerce a page_number value to int, handling malformed LLM output.
+
+        Handles: 6, "6", "Page 6", "page 6", "p6", "p. 6", None, etc.
+        """
+        if raw is None:
+            return 0
+        if isinstance(raw, int):
+            return raw
+        s = str(raw).strip()
+        # Strip common prefixes: "Page 6", "page 6", "p6", "p. 6"
+        import re
+
+        m = re.search(r"(\d+)", s)
+        return int(m.group(1)) if m else 0
 
     @staticmethod
     def _parse_citations(
@@ -176,11 +214,13 @@ Provide a detailed answer based only on the provided context."""
         pages: set[int] = set()
         quotes: list[str] = []
         for c in raw_citations:
+            if not isinstance(c, dict):
+                continue
             cit = Citation(
-                page_number=int(c.get("page_number", 0)),
-                section_title=c.get("section_title", ""),
-                section_type=c.get("section_type", ""),
-                verbatim_quote=c.get("verbatim_quote", ""),
+                page_number=ScoutChat._safe_page_number(c.get("page_number", 0)),
+                section_title=str(c.get("section_title", "") or ""),
+                section_type=str(c.get("section_type", "") or ""),
+                verbatim_quote=str(c.get("verbatim_quote", "") or ""),
             )
             citations.append(cit)
             if cit.page_number:
@@ -192,6 +232,8 @@ Provide a detailed answer based only on the provided context."""
     @staticmethod
     def _citations_from_answer(ans: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract raw citation list from an LLM answer, with old-format fallback."""
+        if not isinstance(ans, dict):
+            return []
         raw = ans.get("citations", [])
         if raw:
             return raw
@@ -230,7 +272,7 @@ Provide a detailed answer based only on the provided context."""
             if not self._batch_extraction_prompt:
                 from scout_ai.prompts.registry import get_prompt
 
-                self._batch_extraction_prompt = get_prompt("aps", "extraction", "BATCH_EXTRACTION_PROMPT")
+                self._batch_extraction_prompt = get_prompt(self._domain, "extraction", "BATCH_EXTRACTION_PROMPT")
             prompt = self._batch_extraction_prompt.format(
                 context=context[:8000],
                 questions=questions_text,
@@ -258,8 +300,8 @@ Provide a detailed answer based only on the provided context."""
             results.append(
                 ExtractionResult(
                     question_id=q.question_id,
-                    answer=ans.get("answer", "Not found"),
-                    confidence=min(max(float(ans.get("confidence", 0.0)), 0.0), 1.0),
+                    answer=self._safe_answer(ans.get("answer", "Not found")),
+                    confidence=self._safe_confidence(ans.get("confidence", 0.0)),
                     citations=citations,
                     source_pages=source_pages,
                     evidence_text=evidence_text,
@@ -287,7 +329,9 @@ Provide a detailed answer based only on the provided context."""
             if not self._individual_extraction_prompt:
                 from scout_ai.prompts.registry import get_prompt
 
-                self._individual_extraction_prompt = get_prompt("aps", "extraction", "INDIVIDUAL_EXTRACTION_PROMPT")
+                self._individual_extraction_prompt = get_prompt(
+                    self._domain, "extraction", "INDIVIDUAL_EXTRACTION_PROMPT",
+                )
             prompt = self._individual_extraction_prompt.format(
                 context=context[:8000],
                 question=question.question_text,
@@ -305,8 +349,8 @@ Provide a detailed answer based only on the provided context."""
 
         return ExtractionResult(
             question_id=question.question_id,
-            answer=parsed.get("answer", "Not found"),
-            confidence=min(max(float(parsed.get("confidence", 0.0)), 0.0), 1.0),
+            answer=self._safe_answer(parsed.get("answer", "Not found")),
+            confidence=self._safe_confidence(parsed.get("confidence", 0.0)),
             citations=citations,
             source_pages=source_pages,
             evidence_text=evidence_text,

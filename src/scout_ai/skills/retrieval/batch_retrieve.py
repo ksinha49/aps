@@ -53,10 +53,7 @@ def batch_retrieve(  # type: ignore[assignment]
     # Group by category (str-based)
     by_category: dict[str, list[ExtractionQuestion]] = defaultdict(list)
     for q in questions:
-        cat_key = q.category
-        if hasattr(cat_key, "value"):
-            cat_key = cat_key.value
-        by_category[cat_key].append(q)
+        by_category[q.category].append(q)
 
     tree_structure = json.dumps(tree_to_dict(index.tree), indent=2)
 

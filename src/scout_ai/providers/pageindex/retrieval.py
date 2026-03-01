@@ -36,10 +36,16 @@ class ScoutRetrieval(IRetrievalProvider):
         client: LLMClient,
         *,
         tree_search_prompt: str | None = None,
+        category_descriptions: dict[str, str] | None = None,
+        category_search_prompt: str | None = None,
+        domain: str = "aps",
     ) -> None:
         self._settings = settings
         self._client = client
         self._tree_search_prompt = tree_search_prompt or ""
+        self._category_descriptions = category_descriptions
+        self._category_search_prompt = category_search_prompt
+        self._domain = domain
 
     async def retrieve(
         self,
@@ -52,7 +58,7 @@ class ScoutRetrieval(IRetrievalProvider):
         if not self._tree_search_prompt:
             from scout_ai.prompts.registry import get_prompt
 
-            self._tree_search_prompt = get_prompt("aps", "retrieval", "TREE_SEARCH_PROMPT")
+            self._tree_search_prompt = get_prompt(self._domain, "retrieval", "TREE_SEARCH_PROMPT")
         prompt = self._tree_search_prompt.format(
             tree_structure=tree_structure,
             query=query,
@@ -62,15 +68,28 @@ class ScoutRetrieval(IRetrievalProvider):
         response = await self._client.complete(prompt)
         parsed = self._client.extract_json(response)
 
-        node_ids = parsed.get("node_ids", [])
-        reasoning = parsed.get("reasoning", "")
+        # Handle malformed LLM output: model may return a list instead of dict
+        if isinstance(parsed, list):
+            node_ids = parsed
+            reasoning = ""
+        else:
+            node_ids = parsed.get("node_ids", [])
+            reasoning = parsed.get("reasoning", "")
+
+        # Coerce node_ids: LLM may return dicts like {"node_id": "..."} instead of strings
+        clean_ids: list[str] = []
+        for nid in node_ids:
+            if isinstance(nid, str):
+                clean_ids.append(nid)
+            elif isinstance(nid, dict) and "node_id" in nid:
+                clean_ids.append(str(nid["node_id"]))
 
         # Resolve node_ids to actual nodes
         node_map = create_node_mapping(index.tree)
         retrieved_nodes: list[dict[str, Any]] = []
         matched_nodes = []
 
-        for nid in node_ids[:top_k]:
+        for nid in clean_ids[:top_k]:
             node = node_map.get(nid)
             if node:
                 matched_nodes.append(node)
@@ -99,5 +118,13 @@ class ScoutRetrieval(IRetrievalProvider):
         """Category-batched retrieval — delegates to BatchRetrieval."""
         from scout_ai.providers.pageindex.batch_retrieval import BatchRetrieval
 
-        batch = BatchRetrieval(self._settings, self._client, self)
-        return await batch.batch_retrieve(index, questions)
+        batch = BatchRetrieval(
+            self._settings,
+            self._client,
+            self,
+            category_descriptions=self._category_descriptions,
+            category_search_prompt=self._category_search_prompt,
+            domain=self._domain,
+        )
+        results = await batch.batch_retrieve(index, questions)
+        return results

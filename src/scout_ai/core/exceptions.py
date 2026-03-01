@@ -9,8 +9,11 @@ from __future__ import annotations
 from scout_ai.exceptions import (
     ExtractionError,
     IndexBuildError,
+    JSONParseError,
     LLMClientError,
+    NonRetryableError,
     RetrievalError,
+    RetryableError,
     ScoutError,
     TokenizerError,
 )
@@ -38,6 +41,9 @@ __all__ = [
     "RetrievalError",
     "ExtractionError",
     "LLMClientError",
+    "RetryableError",
+    "NonRetryableError",
+    "JSONParseError",
     "TokenizerError",
     "CheckpointError",
     "PersistenceError",

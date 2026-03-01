@@ -10,10 +10,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 from typing import Any
 
 from scout_ai.config import ScoutSettings
-from scout_ai.exceptions import LLMClientError
+from scout_ai.exceptions import LLMClientError, NonRetryableError, RetryableError
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,26 @@ class LLMClient:
     @property
     def model(self) -> str:
         return self._settings.llm_model
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        """Classify whether an LLM API error should be retried.
+
+        Non-retryable: AuthenticationError, BadRequestError, NotFoundError (4xx non-429).
+        Retryable (default): everything else including rate limits, timeouts, 5xx.
+        """
+        try:
+            from litellm.exceptions import (
+                AuthenticationError,
+                BadRequestError,
+                NotFoundError,
+            )
+
+            non_retryable = (AuthenticationError, BadRequestError, NotFoundError)
+            return not isinstance(exc, non_retryable)
+        except ImportError:
+            # Without litellm type info, treat all errors as retryable
+            return True
 
     async def complete(
         self,
@@ -93,8 +114,12 @@ class LLMClient:
 
         messages.append({"role": "user", "content": prompt})
 
+        max_retries = self._settings.llm_max_retries
+        jitter_factor = getattr(self._settings, "retry_jitter_factor", 0.5)
+        max_delay = getattr(self._settings, "retry_max_delay", 30.0)
+
         last_error: Exception | None = None
-        for attempt in range(self._settings.llm_max_retries):
+        for attempt in range(max_retries):
             try:
                 kwargs: dict[str, Any] = {
                     "model": effective_model,
@@ -113,13 +138,26 @@ class LLMClient:
 
             except Exception as e:
                 last_error = e
-                wait = min(2**attempt, 30)
-                log.warning(f"LLM retry {attempt + 1}/{self._settings.llm_max_retries}: {e}")
-                if attempt < self._settings.llm_max_retries - 1:
+                retryable = self._is_retryable(e)
+
+                if not retryable:
+                    raise NonRetryableError(
+                        f"Non-retryable LLM error: {e}"
+                    ) from e
+
+                base_wait = min(2 ** attempt, max_delay)
+                jitter = random.uniform(0, base_wait * jitter_factor)
+                wait = base_wait + jitter
+
+                log.warning(
+                    "LLM retry %d/%d: %s (retryable=%s, wait=%.1fs)",
+                    attempt + 1, max_retries, e, retryable, wait,
+                )
+                if attempt < max_retries - 1:
                     await asyncio.sleep(wait)
 
-        raise LLMClientError(
-            f"LLM API failed after {self._settings.llm_max_retries} retries: {last_error}"
+        raise RetryableError(
+            f"LLM API failed after {max_retries} retries: {last_error}"
         ) from last_error
 
     async def complete_batch(
@@ -153,7 +191,7 @@ class LLMClient:
                         timeout=timeout_per_task,
                     )
                 except (asyncio.TimeoutError, LLMClientError) as e:
-                    log.warning(f"Batch task failed: {e}")
+                    log.warning("Batch task failed: %s", e)
                     return ""
 
         return await asyncio.gather(*[_bounded(p) for p in prompts])
@@ -162,32 +200,88 @@ class LLMClient:
 
     @staticmethod
     def extract_json(content: str) -> Any:
-        """Parse JSON from LLM response, handling ```json fences and common issues."""
-        try:
-            # Extract from ```json ... ``` fences
-            start = content.find("```json")
-            if start != -1:
-                start += 7
-                end = content.rfind("```")
-                json_str = content[start:end].strip()
-            else:
-                json_str = content.strip()
+        """Parse JSON from LLM response, handling fences, prose, and common issues."""
+        import re
 
-            json_str = json_str.replace("None", "null")
-            json_str = json_str.replace("\n", " ").replace("\r", " ")
-            json_str = " ".join(json_str.split())
-
-            return json.loads(json_str)
-        except json.JSONDecodeError:
+        def _try_parse(s: str) -> Any | None:
+            """Attempt JSON parse with common fixups."""
+            s = s.strip()
+            if not s:
+                return None
+            # Fix Python-style None → null
+            s = s.replace("None", "null")
             try:
-                json_str = json_str.replace(",]", "]").replace(",}", "}")
-                return json.loads(json_str)
-            except Exception:
-                log.error("Failed to parse JSON from LLM response")
-                return {}
-        except Exception:
-            log.error("Unexpected error extracting JSON")
-            return {}
+                return json.loads(s)
+            except json.JSONDecodeError:
+                pass
+            # Trailing comma fix
+            s = re.sub(r",\s*([}\]])", r"\1", s)
+            try:
+                return json.loads(s)
+            except json.JSONDecodeError:
+                return None
+
+        # Strategy 1: ```json ... ``` fences
+        fence_start = content.find("```json")
+        if fence_start != -1:
+            inner = content[fence_start + 7:]
+            fence_end = inner.find("```")
+            if fence_end != -1:
+                result = _try_parse(inner[:fence_end])
+                if result is not None:
+                    return result
+
+        # Strategy 2: ``` ... ``` generic fence
+        fence_start = content.find("```")
+        if fence_start != -1:
+            inner = content[fence_start + 3:]
+            fence_end = inner.find("```")
+            if fence_end != -1:
+                result = _try_parse(inner[:fence_end])
+                if result is not None:
+                    return result
+
+        # Strategy 3: Full content as JSON
+        result = _try_parse(content)
+        if result is not None:
+            return result
+
+        # Strategy 4: Find first { ... } or [ ... ] in the response
+        for open_ch, close_ch in [("{", "}"), ("[", "]")]:
+            idx = content.find(open_ch)
+            if idx == -1:
+                continue
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(idx, len(content)):
+                ch = content[i]
+                if escape:
+                    escape = False
+                    continue
+                if ch == "\\":
+                    escape = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == open_ch:
+                    depth += 1
+                elif ch == close_ch:
+                    depth -= 1
+                    if depth == 0:
+                        result = _try_parse(content[idx : i + 1])
+                        if result is not None:
+                            return result
+                        break
+
+        log.error(
+            "Failed to parse JSON from LLM response",
+            extra={"response_length": len(content), "response_preview": content[:200]},
+        )
+        return {}
 
     async def close(self) -> None:
         """No-op — LiteLLM manages its own connection pooling."""

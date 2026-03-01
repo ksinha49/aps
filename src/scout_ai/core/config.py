@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -33,6 +33,8 @@ class LLMConfig(BaseSettings):
     seed: int | None = None
     timeout: float = 120.0
     max_retries: int = 5
+    retry_jitter_factor: float = 0.5
+    retry_max_delay: float = 30.0
     aws_region: str = "us-west-2"
 
 
@@ -61,7 +63,14 @@ class EnrichmentConfig(BaseSettings):
     model_config = {"env_prefix": "SCOUT_ENRICHMENT_"}
 
     enable_node_summaries: bool = True
-    enable_section_classification: bool = True
+    enable_section_classification: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "enable_section_classification",
+            "enable_medical_classification",
+            "SCOUT_ENRICHMENT_ENABLE_MEDICAL_CLASSIFICATION",
+        ),
+    )
     enable_doc_description: bool = False
 
 

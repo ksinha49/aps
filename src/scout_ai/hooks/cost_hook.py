@@ -76,8 +76,12 @@ class CostHook:
     def _on_model_call(self, event: Any) -> None:
         usage_data = getattr(event, "usage", {}) or {}
         summary = get_current_usage()
-        summary.prompt_tokens += usage_data.get("inputTokens", usage_data.get("prompt_tokens", 0))
-        summary.completion_tokens += usage_data.get("outputTokens", usage_data.get("completion_tokens", 0))
+
+        prompt_toks = usage_data.get("inputTokens", usage_data.get("prompt_tokens", 0))
+        completion_toks = usage_data.get("outputTokens", usage_data.get("completion_tokens", 0))
+
+        summary.prompt_tokens += prompt_toks
+        summary.completion_tokens += completion_toks
         summary.cached_tokens += usage_data.get("cache_read_input_tokens", 0)
         summary.cache_creation_tokens += usage_data.get("cache_creation_input_tokens", 0)
         summary.call_count += 1
@@ -85,3 +89,13 @@ class CostHook:
             summary.cache_hit_count += 1
         else:
             summary.cache_miss_count += 1
+
+        # Bridge to RunAnalytics: increment current stage's token counts
+        from scout_ai.hooks.run_tracker import get_current_run
+
+        run = get_current_run()
+        if run and run.stages:
+            current_stage = run.stages[-1]
+            current_stage.llm_calls += 1
+            current_stage.prompt_tokens += prompt_toks
+            current_stage.completion_tokens += completion_toks

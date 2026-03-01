@@ -64,7 +64,8 @@ class DomainConfig:
 
         Raises:
             ValueError: If the attribute is empty or not a dotted-path field.
-            ImportError: If the module/object cannot be found.
+            ImportError: If the module cannot be found.
+            AttributeError: If a ``module:attr`` reference has no such attr.
         """
         dotted = getattr(self, attr, "")
         if not dotted:
@@ -167,13 +168,17 @@ def get_registry() -> DomainRegistry:
 
 
 def _import_dotted_path(dotted: str) -> Any:
-    """Import ``module.path:ClassName`` or ``module.path.attr``."""
+    """Import a dotted reference.
+
+    Supports three forms:
+    - ``module.path:ClassName`` — import *module.path*, return ``ClassName``
+    - ``module.path`` (no colon) — import as a module directly
+    - ``bare_name`` — import as a top-level module
+    """
     if ":" in dotted:
         module_path, obj_name = dotted.rsplit(":", 1)
-    elif "." in dotted:
-        module_path, obj_name = dotted.rsplit(".", 1)
-    else:
-        return importlib.import_module(dotted)
+        mod = importlib.import_module(module_path)
+        return getattr(mod, obj_name)
 
-    mod = importlib.import_module(module_path)
-    return getattr(mod, obj_name)
+    # No colon — treat the whole string as a module path.
+    return importlib.import_module(dotted)

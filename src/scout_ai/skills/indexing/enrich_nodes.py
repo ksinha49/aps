@@ -24,12 +24,12 @@ def enrich_nodes(  # type: ignore[assignment]
     enable_description: bool = False,
     tool_context: ToolContext = None,
 ) -> str:
-    """Enrich tree nodes with summaries, medical classification, and doc description.
+    """Enrich tree nodes with summaries, section classification, and doc description.
 
     Args:
         tree_summary: Flattened list of node dicts with title, text, node_id.
         enable_summaries: Generate 2-3 sentence summaries for each node.
-        enable_classification: Classify nodes by medical section type.
+        enable_classification: Classify nodes by domain section type.
         enable_description: Generate a one-sentence document description.
 
     Returns:
