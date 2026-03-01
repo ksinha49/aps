@@ -30,6 +30,8 @@ from scout_ai.domains.aps.formatters.pdf_styles import (
     RISK_TIER_COLORS,
     SECTION_BORDER_COLOR,
     SEVERITY_COLORS,
+    YN_COLORS,
+    YN_CONDITION_DISPLAY_NAMES,
 )
 from scout_ai.domains.aps.models import (
     APSSection,
@@ -41,6 +43,8 @@ from scout_ai.domains.aps.models import (
     RiskClassification,
     SynthesisSection,
     UnderwriterSummary,
+    UnderwritingAPSSummary,
+    YNCondition,
 )
 
 try:
@@ -181,6 +185,9 @@ class PDFFormatter:
         Dispatches to the APS-specific renderer when an ``APSSummary`` is
         passed, otherwise uses the legacy renderer.
         """
+        # UnderwritingAPSSummary check must precede APSSummary (subclass)
+        if isinstance(summary, UnderwritingAPSSummary):
+            return self._format_underwriting(summary, **kwargs)
         if isinstance(summary, APSSummary):
             return self._format_aps(summary, **kwargs)
         return self._format_legacy(summary, **kwargs)
@@ -1397,7 +1404,386 @@ class PDFFormatter:
 
         canvas.restoreState()
 
+    # ══════════════════════════════════════════════════════════════════
+    # Underwriting template rendering
+    # ══════════════════════════════════════════════════════════════════
+
+    def _format_underwriting(self, summary: UnderwritingAPSSummary, **kwargs: Any) -> bytes:
+        """Render ``UnderwritingAPSSummary`` to a professional underwriting PDF."""
+        buffer = BytesIO()
+        frame = Frame(
+            self._margin,
+            self._margin + 0.3 * inch,
+            self._content_width(),
+            float(self._page_size[1]) - 2 * self._margin - 0.6 * inch,
+            id="main",
+        )
+        template = PageTemplate(
+            id="main",
+            frames=[frame],
+            onPage=self._aps_header_footer,
+        )
+        doc = _APSDocTemplate(
+            buffer,
+            pagesize=self._page_size,
+            leftMargin=self._margin,
+            rightMargin=self._margin,
+            topMargin=self._margin + 0.3 * inch,
+            bottomMargin=self._margin + 0.3 * inch,
+        )
+        doc.addPageTemplates([template])
+
+        story = self._build_uw_story(summary, **kwargs)
+        doc.multiBuild(story)
+        return buffer.getvalue()
+
+    def _build_uw_story(self, summary: UnderwritingAPSSummary, **kwargs: Any) -> list[Flowable]:
+        """Orchestrate the underwriting PDF story.
+
+        Mirrors the full APS story structure (cover, TOC, executive summary,
+        numbered sections, red flags, assessment, appendix) and inserts the
+        underwriting-specific sections (demographics header, medical summary
+        table, Y/N conditions grid, narrative sections) between the executive
+        summary and the detailed APS sections.
+        """
+        story: list[Flowable] = []
+        batch_results = kwargs.get("batch_results", [])
+
+        # ── Cover page ───────────────────────────────────────────────
+        if self._config.include_cover_page:
+            story.extend(self._build_aps_cover_page(summary))
+
+        # ── Table of Contents ────────────────────────────────────────
+        if self._config.include_toc:
+            story.extend(self._build_toc())
+            story.append(PageBreak())
+
+        # ── Executive Summary (demographics grid, risk badge, stats) ─
+        story.extend(self._build_aps_executive_summary(summary))
+
+        # ── Underwriting-specific sections ───────────────────────────
+        # Demographics header (policy number, date range, total pages)
+        story.extend(self._build_uw_demographics_header(summary))
+        story.append(Spacer(1, 12))
+
+        # Medical summary table
+        if batch_results:
+            story.extend(self._build_uw_medical_summary_table(summary, batch_results))
+            story.append(Spacer(1, 12))
+
+        # Y/N conditions grid
+        if summary.yn_conditions:
+            story.extend(self._build_uw_yn_conditions_grid(summary.yn_conditions))
+            story.append(Spacer(1, 12))
+
+        # Narrative sections
+        narrative_sections = [
+            ("Morbidity Concerns", summary.morbidity_concerns, summary.morbidity_citations),
+            ("Mortality Concerns", summary.mortality_concerns, summary.mortality_citations),
+            ("Residence & Travel", summary.residence_travel, summary.residence_citations),
+        ]
+        for title, content, citations in narrative_sections:
+            if content:
+                story.extend(self._build_uw_narrative_section(title, content, citations))
+                story.append(Spacer(1, 8))
+
+        # ── Numbered APS sections (same as standard APS PDF) ────────
+        section_num = 1
+        for section in summary.sections:
+            num_str = f"{section_num}.0" if self._config.section_numbering else ""
+            story.extend(self._build_aps_section(section, num_str))
+            section_num += 1
+
+        # ── Red Flags ────────────────────────────────────────────────
+        if summary.red_flags and self._config.red_flag_alerts:
+            story.extend(self._build_red_flags_section(summary.red_flags))
+
+        # ── Overall Assessment ───────────────────────────────────────
+        if summary.overall_assessment:
+            story.extend(self._build_aps_overall_assessment(summary.overall_assessment))
+
+        # ── Appendix — citation index ────────────────────────────────
+        if self._config.include_appendix and summary.citation_index:
+            story.extend(self._build_aps_appendix(summary))
+
+        return story
+
+    # ── Underwriting demographics header ─────────────────────────────
+
+    def _build_uw_demographics_header(self, summary: UnderwritingAPSSummary) -> list[Flowable]:
+        """2-row, 4-column demographics header for underwriting template."""
+        items: list[Flowable] = [
+            Paragraph("Underwriting APS Summary", self._styles["aps_heading_1"]),
+        ]
+
+        demo = summary.demographics
+        pairs: list[tuple[str, str]] = [
+            ("Name", demo.full_name or "N/A"),
+            ("Policy Number", summary.policy_number or "N/A"),
+            ("DOB", demo.date_of_birth or "N/A"),
+            ("APS Date Range", summary.aps_date_range or "N/A"),
+            ("Gender", demo.gender or "N/A"),
+            ("Total Pages", str(summary.total_document_pages) if summary.total_document_pages else "N/A"),
+        ]
+
+        rows: list[list[Any]] = []
+        for i in range(0, len(pairs), 2):
+            row: list[Any] = [
+                Paragraph(f"<b>{pairs[i][0]}:</b>", self._styles["demographics_label"]),
+                Paragraph(pairs[i][1], self._styles["demographics_value"]),
+            ]
+            if i + 1 < len(pairs):
+                row.append(Paragraph(f"<b>{pairs[i + 1][0]}:</b>", self._styles["demographics_label"]))
+                row.append(Paragraph(pairs[i + 1][1], self._styles["demographics_value"]))
+            else:
+                row.extend(["", ""])
+            rows.append(row)
+
+        cw = self._content_width()
+        col_widths = [cw * 0.15, cw * 0.35, cw * 0.18, cw * 0.32]
+        table = Table(rows, colWidths=col_widths)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), _hex(DEMOGRAPHICS_HEADER_BG)),
+                    ("BOX", (0, 0), (-1, -1), 0.5, _hex(SECTION_BORDER_COLOR)),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, _hex(SECTION_BORDER_COLOR)),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        items.append(table)
+        return items
+
+    # ── Underwriting medical summary table ───────────────────────────
+
+    def _build_uw_medical_summary_table(
+        self,
+        summary: UnderwritingAPSSummary,
+        batch_results: list[Any],
+    ) -> list[Flowable]:
+        """Multi-section summary table with value, date, and page columns."""
+        items: list[Flowable] = [
+            Paragraph("Medical Summary", self._styles["aps_heading_2"]),
+        ]
+
+        header = ["Field", "Value", "Date", "Page"]
+        header_row = [Paragraph(f"<b>{h}</b>", self._styles["table_header"]) for h in header]
+        rows: list[list[Any]] = [header_row]
+
+        # Build answer lookup from batch results
+        answer_map: dict[str, Any] = {}
+        for br in batch_results:
+            extractions = br.extractions if hasattr(br, "extractions") else br.get("extractions", [])
+            for ext in extractions:
+                qid = ext.question_id if hasattr(ext, "question_id") else ext.get("question_id", "")
+                answer_map[qid] = ext
+
+        # Summary fields to display
+        fields = [
+            ("Blood Pressure", "uw-vs-001"),
+            ("BMI", "uw-vs-002"),
+            ("Height/Weight", "uw-vs-003"),
+            ("HbA1c", "uw-lab-003"),
+            ("Lipid Panel", "uw-lab-004"),
+            ("Most Recent Encounter", "uw-enc-002"),
+            ("Total Encounters", "uw-enc-003"),
+        ]
+
+        for label, qid in fields:
+            ext = answer_map.get(qid)
+            if ext is None:
+                continue
+            answer = ext.answer if hasattr(ext, "answer") else ext.get("answer", "")
+            if answer == "Not found":
+                continue
+            # Extract first page citation
+            citations = ext.citations if hasattr(ext, "citations") else ext.get("citations", [])
+            page_ref = ""
+            if citations:
+                c = citations[0]
+                pn = c.page_number if hasattr(c, "page_number") else c.get("page_number", 0)
+                if pn:
+                    page_ref = f"p.{pn}"
+
+            # Split date from answer text
+            value_text, date_text = self._split_value_and_date(str(answer))
+
+            rows.append([
+                Paragraph(f"<b>{label}</b>", self._styles["body"]),
+                Paragraph(value_text[:200], self._styles["body"]),
+                Paragraph(date_text, self._styles["body"]),
+                Paragraph(page_ref, self._styles["citation_ref"]),
+            ])
+
+        if len(rows) <= 1:
+            return []
+
+        cw = self._content_width()
+        col_widths = [cw * 0.20, cw * 0.50, cw * 0.15, cw * 0.15]
+        table = Table(rows, colWidths=col_widths, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), _hex(HEADER_BG_COLOR)),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), _hex(HEADER_TEXT_COLOR)),
+                    ("GRID", (0, 0), (-1, -1), 0.5, _hex(SECTION_BORDER_COLOR)),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.white, HexColor("#F8FAFC")]),
+                ]
+            )
+        )
+        items.append(table)
+        return items
+
+    # ── Y/N conditions grid ──────────────────────────────────────────
+
+    def _build_uw_yn_conditions_grid(self, conditions: list[YNCondition]) -> list[Flowable]:
+        """Color-coded Y/N conditions table for underwriting."""
+        items: list[Flowable] = [
+            Paragraph("Conditions Screening", self._styles["aps_heading_2"]),
+        ]
+
+        header = ["Condition", "Y/N", "Detailed Answer", "Page"]
+        header_row = [Paragraph(f"<b>{h}</b>", self._styles["table_header"]) for h in header]
+        rows: list[list[Any]] = [header_row]
+
+        # Track row indices for Y/N coloring
+        yn_cell_styles: list[tuple[int, str]] = []
+
+        for cond in conditions:
+            display_name = YN_CONDITION_DISPLAY_NAMES.get(cond.condition_name, cond.condition_name)
+            if cond.time_qualifier and cond.time_qualifier not in display_name:
+                display_name = f"{display_name} ({cond.time_qualifier})"
+
+            yn_color = YN_COLORS.get(cond.answer_yn, YN_COLORS["Unknown"])
+            yn_text = f'<font color="{yn_color}"><b>{cond.answer_yn}</b></font>'
+
+            detail = cond.detail[:200] if cond.detail else ""
+            page_ref = ""
+            if cond.citations:
+                pages = sorted({c.page_number for c in cond.citations if c.page_number})
+                if pages:
+                    page_ref = ", ".join(f"p.{p}" for p in pages[:3])
+
+            row_idx = len(rows)
+            yn_cell_styles.append((row_idx, cond.answer_yn))
+
+            rows.append([
+                Paragraph(display_name, self._styles["body"]),
+                Paragraph(yn_text, self._styles["body"]),
+                Paragraph(detail, self._styles["body"]),
+                Paragraph(page_ref, self._styles["citation_ref"]),
+            ])
+
+        cw = self._content_width()
+        col_widths = [cw * 0.28, cw * 0.07, cw * 0.50, cw * 0.15]
+        table = Table(rows, colWidths=col_widths, repeatRows=1)
+
+        base_style: list[Any] = [
+            ("BACKGROUND", (0, 0), (-1, 0), _hex(HEADER_BG_COLOR)),
+            ("TEXTCOLOR", (0, 0), (-1, 0), _hex(HEADER_TEXT_COLOR)),
+            ("GRID", (0, 0), (-1, -1), 0.5, _hex(SECTION_BORDER_COLOR)),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.white, HexColor("#F8FAFC")]),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]
+
+        # Color-code Y/N cells
+        _yn_bg_map = {
+            "Y": "#FEE2E2",       # light red background
+            "N": "#DCFCE7",       # light green background
+            "Unknown": "#FEF3C7",  # light amber background
+        }
+        for row_idx, yn_val in yn_cell_styles:
+            bg = _yn_bg_map.get(yn_val, "#FFFFFF")
+            base_style.append(("BACKGROUND", (1, row_idx), (1, row_idx), HexColor(bg)))
+
+        table.setStyle(TableStyle(base_style))
+        items.append(table)
+        return items
+
+    # ── Underwriting narrative section ───────────────────────────────
+
+    def _build_uw_narrative_section(
+        self,
+        title: str,
+        content: str,
+        citations: list[CitationRef],
+    ) -> list[Flowable]:
+        """Reusable narrative section with page references."""
+        items: list[Flowable] = [
+            Paragraph(title, self._styles["aps_heading_2"]),
+        ]
+
+        box_data: list[list[Any]] = [
+            [Paragraph(content, self._styles["body"])],
+        ]
+        if citations and self._config.include_citation_refs:
+            refs = "; ".join(c.display() for c in citations)
+            box_data.append([Paragraph(refs, self._styles["citation_ref"])])
+
+        box = Table(box_data, colWidths=[self._content_width()])
+        box.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), _hex(ASSESSMENT_BOX_BG_COLOR)),
+                    ("BOX", (0, 0), (-1, -1), 1, _hex(SECTION_BORDER_COLOR)),
+                    ("TOPPADDING", (0, 0), (-1, -1), 8),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ]
+            )
+        )
+        items.append(box)
+        return items
+
     # ── Helpers ───────────────────────────────────────────────────────
+
+    # Date pattern: MM/DD/YYYY or MM-DD-YYYY
+    _DATE_RE = re.compile(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}")
+    # Common prefixes that signal a date fragment: "date:", "dated", "on"
+    _DATE_PREFIX_RE = re.compile(r",?\s*(?:date[d]?\s*:\s*|on\s+)(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})", re.IGNORECASE)
+
+    @classmethod
+    def _split_value_and_date(cls, answer: str) -> tuple[str, str]:
+        """Extract the last date from *answer*, returning (value, date).
+
+        Handles patterns like:
+        - "BMI 28.3, date: 03/15/2024" -> ("BMI 28.3", "03/15/2024")
+        - "HbA1c: 5.8%, date: 03/15/2024" -> ("HbA1c: 5.8%", "03/15/2024")
+        - "12/15/2024 - Annual physical" -> ("Annual physical", "12/15/2024")
+        - "12" -> ("12", "")
+        """
+        # Try explicit "date:" pattern first — strip the prefix+date from value
+        m = cls._DATE_PREFIX_RE.search(answer)
+        if m:
+            date_str = m.group(1)
+            value = answer[:m.start()].rstrip(", ")
+            return value, date_str
+
+        # Find all date-like tokens
+        dates = cls._DATE_RE.findall(answer)
+        if not dates:
+            return answer, ""
+
+        # If the answer starts with a date followed by a separator, treat it
+        # as "date - description" (e.g., "12/15/2024 - Annual physical exam")
+        leading = re.match(r"^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*[-:]\s*(.+)", answer)
+        if leading:
+            return leading.group(2).strip(), leading.group(1)
+
+        # Otherwise use the last date found and strip it from the value
+        last_date = dates[-1]
+        # Remove the date and surrounding separators
+        value = re.sub(r",?\s*\(?" + re.escape(last_date) + r"\)?\s*,?", "", answer).strip().rstrip(",")
+        return value, last_date
 
     def _content_width(self) -> float:
         return float(self._page_size[0]) - 2 * self._margin

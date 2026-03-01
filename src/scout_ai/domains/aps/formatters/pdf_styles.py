@@ -125,3 +125,47 @@ RED_FLAG_BORDER_COLOR = "#DC2626"
 CITATION_TEXT_COLOR = "#6B7280"
 DEMOGRAPHICS_HEADER_BG = "#F1F5F9"
 TOC_LINK_COLOR = "#1E3A5F"
+
+# ── Underwriting Y/N condition colors ──────────────────────────────
+
+YN_COLORS: dict[str, str] = {
+    "Y": "#DC2626",   # Red
+    "N": "#16A34A",   # Green
+    "Unknown": "#D97706",  # Amber
+}
+
+# ── Underwriting category display names ────────────────────────────
+
+UNDERWRITING_CATEGORY_DISPLAY_NAMES: dict[str, str] = {
+    **CATEGORY_DISPLAY_NAMES,
+    "encounter_history": "Encounter History",
+    "substance_use_history": "Substance Use History",
+    "critical_medical_conditions": "Critical Medical Conditions",
+    "mental_health_conditions": "Mental Health Conditions",
+    "other_critical_conditions": "Other Critical Conditions",
+    "morbidity_concerns": "Morbidity Concerns",
+    "mortality_concerns": "Mortality Concerns",
+    "residence_travel": "Residence & Travel",
+}
+
+# ── Underwriting Y/N condition display names ───────────────────────
+
+YN_CONDITION_DISPLAY_NAMES: dict[str, str] = {
+    "Alcohol Treatment": "Alcohol Treatment (past 2 yrs)",
+    "Tobacco Use": "Tobacco Use",
+    "Drug Use/Treatment": "Drug Use/Treatment (past 3 yrs)",
+    "Dementia": "Dementia",
+    "CVA/Stroke": "CVA/Stroke (past 1 yr)",
+    "Myocardial Infarction": "MI/Heart Attack (past 3 mo)",
+    "Renal Dialysis": "Renal Dialysis",
+    "Cancer": "Cancer (any type)",
+    "Cardiac Valve Replacement": "Cardiac Valve Replacement",
+    "AIDS/HIV": "AIDS/HIV",
+    "Disability (Mental Disorder)": "Disability (Mental Disorder)",
+    "Suicide Attempt": "Suicide Attempt (past 1 yr)",
+    "Psychiatric Hospitalization": "Psychiatric Hospitalization",
+    "Cirrhosis": "Cirrhosis",
+    "Gastric Bypass": "Gastric Bypass (past 6 mo)",
+    "Foreign Residence/Travel": "Foreign Residence/Travel",
+    "Travel-Related Concerns": "Travel-Related Concerns",
+}

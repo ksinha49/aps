@@ -251,6 +251,16 @@ Provide a detailed answer based only on the provided context."""
 
     # ── Tier 1: Batch extraction ─────────────────────────────────────
 
+    @staticmethod
+    def _format_question(q: ExtractionQuestion) -> str:
+        """Format a question with type-specific hints for the LLM."""
+        base = f"- [{q.question_id}] {q.question_text}"
+        if q.expected_type == "boolean_with_detail":
+            base += " (Answer Y/N first, then provide detail)"
+        elif q.expected_type == "list":
+            base += " (Answer as a structured list)"
+        return base
+
     async def _extract_batch(
         self,
         questions: list[ExtractionQuestion],
@@ -261,7 +271,7 @@ Provide a detailed answer based only on the provided context."""
     ) -> list[ExtractionResult]:
         """Extract answers for a batch of Tier 1 questions."""
         questions_text = "\n".join(
-            f"- [{q.question_id}] {q.question_text}" for q in questions
+            self._format_question(q) for q in questions
         )
 
         if system_prompt:
@@ -321,9 +331,10 @@ Provide a detailed answer based only on the provided context."""
         cache_system: bool = False,
     ) -> ExtractionResult:
         """Extract answer for a single Tier 2/3 question with reasoning."""
+        formatted_q = self._format_question(question).lstrip("- ")
         if system_prompt:
             # Caching path: context is in system prompt
-            prompt = _CACHED_INDIVIDUAL_PROMPT.format(question=question.question_text)
+            prompt = _CACHED_INDIVIDUAL_PROMPT.format(question=formatted_q)
         else:
             # Legacy path
             if not self._individual_extraction_prompt:
@@ -334,7 +345,7 @@ Provide a detailed answer based only on the provided context."""
                 )
             prompt = self._individual_extraction_prompt.format(
                 context=context[:8000],
-                question=question.question_text,
+                question=formatted_q,
             )
 
         response = await self._client.complete(

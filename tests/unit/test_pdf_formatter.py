@@ -268,9 +268,11 @@ class TestPDFFormatterAppendix:
             answer: str = "Yes"
             confidence: float = 0.95
             source_pages: list[int] = field(default_factory=lambda: [1, 2])
+            citations: list = field(default_factory=list)
 
         @dataclass
         class FakeBatch:
+            category: str = "test"
             extractions: list[FakeExtraction] = field(default_factory=lambda: [FakeExtraction()])
 
         result = PDFFormatter().format(_make_summary(), batch_results=[FakeBatch()])
@@ -280,6 +282,7 @@ class TestPDFFormatterAppendix:
     def test_appendix_with_empty_batch(self) -> None:
         @dataclass
         class FakeBatch:
+            category: str = "test"
             extractions: list = field(default_factory=list)
 
         result = PDFFormatter().format(_make_summary(), batch_results=[FakeBatch()])

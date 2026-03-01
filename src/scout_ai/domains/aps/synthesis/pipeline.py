@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -24,7 +25,9 @@ from scout_ai.domains.aps.models import (
     SurgicalHistory,
     SynthesisSection,
     UnderwriterSummary,
+    UnderwritingAPSSummary,
     VitalSign,
+    YNCondition,
 )
 from scout_ai.models import BatchExtractionResult
 from scout_ai.prompts.registry import get_prompt
@@ -518,3 +521,185 @@ class SynthesisPipeline:
             allergies=allergies,
             surgical_history=surgical_history,
         )
+
+    # ══════════════════════════════════════════════════════════════════
+    # Underwriting template synthesis
+    # ══════════════════════════════════════════════════════════════════
+
+    # Maps question_id → (condition_name, time_qualifier)
+    _YN_CONDITION_MAP: dict[str, tuple[str, str]] = {
+        "uw-sub-001": ("Alcohol Treatment", "within 2 years"),
+        "uw-sub-002": ("Tobacco Use", ""),
+        "uw-sub-003": ("Drug Use/Treatment", "within 3 years"),
+        "uw-crit-001": ("Dementia", ""),
+        "uw-crit-002": ("CVA/Stroke", "within 1 year"),
+        "uw-crit-003": ("Myocardial Infarction", "within 3 months"),
+        "uw-crit-004": ("Renal Dialysis", ""),
+        "uw-crit-005": ("Cancer", ""),
+        "uw-crit-006": ("Cardiac Valve Replacement", ""),
+        "uw-crit-007": ("AIDS/HIV", ""),
+        "uw-mental-001": ("Disability (Mental Disorder)", ""),
+        "uw-mental-002": ("Suicide Attempt", "within 1 year"),
+        "uw-mental-003": ("Psychiatric Hospitalization", ""),
+        "uw-other-001": ("Cirrhosis", ""),
+        "uw-other-002": ("Gastric Bypass", "within 6 months"),
+        "uw-res-001": ("Foreign Residence/Travel", ""),
+        "uw-res-002": ("Travel-Related Concerns", ""),
+    }
+
+    _YES_PATTERNS = re.compile(r"^(y(es)?|positive|confirmed|true)\b", re.IGNORECASE)
+    _NO_PATTERNS = re.compile(
+        r"^(n(o)?|negative|denied|not\s+found|none|false)\b", re.IGNORECASE,
+    )
+
+    def synthesize_underwriting(
+        self,
+        extraction_results: list[BatchExtractionResult],
+        document_metadata: dict[str, Any] | None = None,
+    ) -> UnderwritingAPSSummary:
+        """Build an ``UnderwritingAPSSummary`` from extraction results.
+
+        This is a **deterministic** post-processing step — no LLM call.
+        It restructures the extraction answers into the underwriting
+        template format with Y/N conditions and narrative sections.
+        """
+        metadata = document_metadata or {}
+
+        # Build a flat question_id → extraction lookup
+        answer_map: dict[str, Any] = {}
+        for batch in extraction_results:
+            for ext in (batch.extractions or []):
+                answer_map[ext.question_id] = ext
+
+        # Demographics
+        policy_number = self._get_answer_text(answer_map, "uw-demo-004")
+        aps_date_range = self._get_answer_text(answer_map, "uw-demo-005")
+        total_pages = metadata.get("total_pages", 0)
+
+        # Y/N conditions
+        yn_conditions: list[YNCondition] = []
+        for qid, (condition_name, time_qual) in self._YN_CONDITION_MAP.items():
+            ext = answer_map.get(qid)
+            if ext is None:
+                yn_conditions.append(
+                    YNCondition(condition_name=condition_name, time_qualifier=time_qual, answer_yn="Unknown"),
+                )
+                continue
+            answer_yn = self._parse_yn(ext.answer)
+            citations = self._convert_citations(ext.citations)
+            yn_conditions.append(
+                YNCondition(
+                    condition_name=condition_name,
+                    time_qualifier=time_qual,
+                    answer_yn=answer_yn,
+                    detail=ext.answer,
+                    citations=citations,
+                ),
+            )
+
+        # Narrative sections
+        morbidity_concerns = self._get_answer_text(answer_map, "uw-morb-001")
+        morb2 = self._get_answer_text(answer_map, "uw-morb-002")
+        if morb2 and morb2 != "Not found":
+            morbidity_concerns = f"{morbidity_concerns}\n\n{morb2}" if morbidity_concerns else morb2
+        morbidity_citations = self._collect_citations(answer_map, ["uw-morb-001", "uw-morb-002"])
+
+        mortality_concerns = self._get_answer_text(answer_map, "uw-mort-001")
+        mort2 = self._get_answer_text(answer_map, "uw-mort-002")
+        if mort2 and mort2 != "Not found":
+            mortality_concerns = f"{mortality_concerns}\n\n{mort2}" if mortality_concerns else mort2
+        mortality_citations = self._collect_citations(answer_map, ["uw-mort-001", "uw-mort-002"])
+
+        residence_travel = self._get_answer_text(answer_map, "uw-res-001")
+        res2 = self._get_answer_text(answer_map, "uw-res-002")
+        if res2 and res2 != "Not found":
+            residence_travel = f"{residence_travel}\n\n{res2}" if residence_travel else res2
+        residence_citations = self._collect_citations(answer_map, ["uw-res-001", "uw-res-002"])
+
+        # Build the base APSSummary fields
+        demographics = PatientDemographics(
+            full_name=self._get_answer_text(answer_map, "uw-demo-001"),
+            date_of_birth=self._get_answer_text(answer_map, "uw-demo-002"),
+            gender=self._get_answer_text(answer_map, "uw-demo-003"),
+        )
+
+        total_answered = sum(len(batch.extractions or []) for batch in extraction_results)
+        high_conf_count = sum(
+            sum(1 for e in (batch.extractions or []) if e.confidence >= 0.7)
+            for batch in extraction_results
+        )
+
+        citation_index = self._build_citation_index(extraction_results)
+
+        return UnderwritingAPSSummary(
+            document_id=metadata.get("doc_id", ""),
+            demographics=demographics,
+            citation_index=citation_index,
+            total_questions_answered=total_answered,
+            high_confidence_count=high_conf_count,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            policy_number=policy_number,
+            aps_date_range=aps_date_range,
+            total_document_pages=total_pages,
+            yn_conditions=yn_conditions,
+            morbidity_concerns=morbidity_concerns,
+            morbidity_citations=morbidity_citations,
+            mortality_concerns=mortality_concerns,
+            mortality_citations=mortality_citations,
+            residence_travel=residence_travel,
+            residence_citations=residence_citations,
+        )
+
+    # ── Underwriting helpers ────────────────────────────────────────
+
+    @staticmethod
+    def _get_answer_text(answer_map: dict[str, Any], question_id: str) -> str:
+        ext = answer_map.get(question_id)
+        if ext is None:
+            return ""
+        answer = ext.answer if hasattr(ext, "answer") else ""
+        return answer if answer != "Not found" else ""
+
+    @classmethod
+    def _parse_yn(cls, answer: str) -> str:
+        """Parse Y/N from free-text answer."""
+        answer = answer.strip()
+        if cls._YES_PATTERNS.search(answer):
+            return "Y"
+        if cls._NO_PATTERNS.search(answer):
+            return "N"
+        return "Unknown"
+
+    @staticmethod
+    def _convert_citations(citations: list[Any]) -> list[CitationRef]:
+        """Convert ``Citation`` (models.py) to ``CitationRef`` (aps/models.py)."""
+        refs: list[CitationRef] = []
+        for c in citations[:3]:
+            page = c.page_number if hasattr(c, "page_number") else 0
+            section_title = c.section_title if hasattr(c, "section_title") else ""
+            source_type = c.section_type if hasattr(c, "section_type") else ""
+            quote = c.verbatim_quote if hasattr(c, "verbatim_quote") else ""
+            refs.append(CitationRef(
+                page_number=page,
+                section_title=section_title,
+                source_type=source_type,
+                verbatim_quote=quote,
+            ))
+        return refs
+
+    @classmethod
+    def _collect_citations(
+        cls, answer_map: dict[str, Any], question_ids: list[str],
+    ) -> list[CitationRef]:
+        """Collect and deduplicate citations from multiple questions."""
+        all_refs: list[CitationRef] = []
+        seen: set[int] = set()
+        for qid in question_ids:
+            ext = answer_map.get(qid)
+            if ext is None:
+                continue
+            for ref in cls._convert_citations(ext.citations):
+                if ref.page_number not in seen:
+                    seen.add(ref.page_number)
+                    all_refs.append(ref)
+        return all_refs

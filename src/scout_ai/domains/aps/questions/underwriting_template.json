@@ -1,0 +1,331 @@
+[
+  {
+    "question_id": "uw-demo-001",
+    "category": "demographics",
+    "question_text": "What is the patient's full name?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-demo-002",
+    "category": "demographics",
+    "question_text": "What is the patient's date of birth?",
+    "tier": 1,
+    "expected_type": "date"
+  },
+  {
+    "question_id": "uw-demo-003",
+    "category": "demographics",
+    "question_text": "What is the patient's gender?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-demo-004",
+    "category": "demographics",
+    "question_text": "What is the policy number or insurance ID?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-demo-005",
+    "category": "demographics",
+    "question_text": "What is the date range covered by this APS (earliest to latest encounter date)?",
+    "tier": 2,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-enc-001",
+    "category": "encounter_history",
+    "question_text": "List all visit dates with the reason for each visit.",
+    "tier": 2,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "uw-enc-002",
+    "category": "encounter_history",
+    "question_text": "What is the most recent encounter date and reason for visit?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-enc-003",
+    "category": "encounter_history",
+    "question_text": "What is the total number of encounters documented in the APS?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-vs-001",
+    "category": "vital_signs",
+    "question_text": "List all blood pressure readings with their dates.",
+    "tier": 2,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "uw-vs-002",
+    "category": "vital_signs",
+    "question_text": "What is the most recent BMI value and its date?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-vs-003",
+    "category": "vital_signs",
+    "question_text": "What are the height and weight measurements with their dates?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-vs-004",
+    "category": "vital_signs",
+    "question_text": "Is there a trend in blood pressure readings (improving, worsening, stable)?",
+    "tier": 3,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-lab-001",
+    "category": "lab_results",
+    "question_text": "List all laboratory results with values, reference ranges, and whether each is normal or abnormal.",
+    "tier": 2,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "uw-lab-002",
+    "category": "lab_results",
+    "question_text": "Are there any critical or significantly abnormal lab values? If so, list them.",
+    "tier": 2,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "uw-lab-003",
+    "category": "lab_results",
+    "question_text": "What is the most recent HbA1c value and date?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-lab-004",
+    "category": "lab_results",
+    "question_text": "What are the most recent lipid panel results (total cholesterol, LDL, HDL, triglycerides) and date?",
+    "tier": 1,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-med-001",
+    "category": "current_medications",
+    "question_text": "List all medications with dosage, frequency, and prescribing physician.",
+    "tier": 2,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "uw-med-002",
+    "category": "current_medications",
+    "question_text": "For each medication, is the patient currently taking it?",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-med-003",
+    "category": "current_medications",
+    "question_text": "Are any controlled substances prescribed (opioids, benzodiazepines, stimulants)? If so, list them with details.",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-dx-001",
+    "category": "diagnoses",
+    "question_text": "List all diagnosed conditions with dates of onset.",
+    "tier": 2,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "uw-dx-002",
+    "category": "diagnoses",
+    "question_text": "For each diagnosed condition, is it chronic or acute? What is the current status?",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-dx-003",
+    "category": "diagnoses",
+    "question_text": "Have there been any specialist referrals? If so, list each specialist type, reason, and date.",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-proc-001",
+    "category": "procedures",
+    "question_text": "List all surgical and non-surgical procedures with dates and outcomes.",
+    "tier": 2,
+    "expected_type": "list"
+  },
+  {
+    "question_id": "uw-proc-002",
+    "category": "procedures",
+    "question_text": "Were there any complications from procedures? If so, describe each.",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-mh-001",
+    "category": "medical_history",
+    "question_text": "Provide a complete summary of the patient's past medical and surgical history.",
+    "tier": 3,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-mh-002",
+    "category": "medical_history",
+    "question_text": "Is there any additional relevant history (family history, social history, review of systems)?",
+    "tier": 3,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-sub-001",
+    "category": "substance_use_history",
+    "question_text": "Has the patient received treatment for alcohol use or abuse within the past 2 years?",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-sub-002",
+    "category": "substance_use_history",
+    "question_text": "Does the patient currently use tobacco or have a history of tobacco use?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-sub-003",
+    "category": "substance_use_history",
+    "question_text": "Has the patient used illicit drugs or been treated for drug abuse within the past 3 years?",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-crit-001",
+    "category": "critical_medical_conditions",
+    "question_text": "Has the patient been diagnosed with dementia or cognitive impairment?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-crit-002",
+    "category": "critical_medical_conditions",
+    "question_text": "Has the patient had a CVA (stroke) or TIA within the past 1 year?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-crit-003",
+    "category": "critical_medical_conditions",
+    "question_text": "Has the patient had a myocardial infarction (heart attack) within the past 3 months?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-crit-004",
+    "category": "critical_medical_conditions",
+    "question_text": "Is the patient currently on or has been recommended for renal dialysis?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-crit-005",
+    "category": "critical_medical_conditions",
+    "question_text": "Has the patient been diagnosed with cancer (any type)? If so, provide type, stage, and treatment status.",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-crit-006",
+    "category": "critical_medical_conditions",
+    "question_text": "Has the patient had a cardiac valve replacement or repair?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-crit-007",
+    "category": "critical_medical_conditions",
+    "question_text": "Has the patient been diagnosed with AIDS or HIV?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-mental-001",
+    "category": "mental_health_conditions",
+    "question_text": "Has the patient been determined to have a disability due to a mental health disorder?",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-mental-002",
+    "category": "mental_health_conditions",
+    "question_text": "Has the patient attempted suicide within the past 1 year?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-mental-003",
+    "category": "mental_health_conditions",
+    "question_text": "Has the patient had any psychiatric hospitalizations? If so, list dates and reasons.",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-other-001",
+    "category": "other_critical_conditions",
+    "question_text": "Has the patient been diagnosed with cirrhosis of the liver?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-other-002",
+    "category": "other_critical_conditions",
+    "question_text": "Has the patient had gastric bypass or bariatric surgery within the past 6 months?",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-morb-001",
+    "category": "morbidity_concerns",
+    "question_text": "What morbidity risk factors are present based on the medical records (e.g., uncontrolled conditions, multiple comorbidities, non-compliance)?",
+    "tier": 3,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-morb-002",
+    "category": "morbidity_concerns",
+    "question_text": "Based on current medical findings, what is the future morbidity risk assessment?",
+    "tier": 3,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-mort-001",
+    "category": "mortality_concerns",
+    "question_text": "What mortality risk factors are present based on the medical records?",
+    "tier": 3,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-mort-002",
+    "category": "mortality_concerns",
+    "question_text": "Are there any life-threatening conditions or terminal diagnoses documented?",
+    "tier": 3,
+    "expected_type": "text"
+  },
+  {
+    "question_id": "uw-res-001",
+    "category": "residence_travel",
+    "question_text": "Has the patient resided in or traveled to a foreign country? If so, provide details.",
+    "tier": 1,
+    "expected_type": "boolean_with_detail"
+  },
+  {
+    "question_id": "uw-res-002",
+    "category": "residence_travel",
+    "question_text": "Are there any travel-related health concerns documented (tropical diseases, endemic exposures)?",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
+  }
+]

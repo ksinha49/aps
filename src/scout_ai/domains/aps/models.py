@@ -326,6 +326,36 @@ class APSSummary:
         )
 
 
+# ── Underwriting-specific models ────────────────────────────────────
+
+
+@dataclass
+class YNCondition:
+    """Y/N condition entry for the underwriting template."""
+
+    condition_name: str
+    time_qualifier: str = ""
+    answer_yn: str = ""  # "Y", "N", or "Unknown"
+    detail: str = ""
+    citations: list[CitationRef] = field(default_factory=list)
+
+
+@dataclass
+class UnderwritingAPSSummary(APSSummary):
+    """APS summary extended with underwriting template sections."""
+
+    policy_number: str = ""
+    aps_date_range: str = ""
+    total_document_pages: int = 0
+    yn_conditions: list[YNCondition] = field(default_factory=list)
+    morbidity_concerns: str = ""
+    morbidity_citations: list[CitationRef] = field(default_factory=list)
+    mortality_concerns: str = ""
+    mortality_citations: list[CitationRef] = field(default_factory=list)
+    residence_travel: str = ""
+    residence_citations: list[CitationRef] = field(default_factory=list)
+
+
 __all__ = [
     "MedicalSectionType",
     "ExtractionCategory",
@@ -346,4 +376,6 @@ __all__ = [
     "RedFlag",
     "APSSection",
     "APSSummary",
+    "YNCondition",
+    "UnderwritingAPSSummary",
 ]

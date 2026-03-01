@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
-from scout_ai.domains.aps.categories import CATEGORY_DESCRIPTIONS
+from scout_ai.domains.aps.categories import (
+    CATEGORY_DESCRIPTIONS,
+    UNDERWRITING_CATEGORY_DESCRIPTIONS,
+)
 from scout_ai.domains.aps.models import MedicalSectionType
 from scout_ai.domains.registry import DomainConfig
+
+# Merge base + underwriting descriptions — underwriting overrides win
+_base = {cat.value: desc for cat, desc in CATEGORY_DESCRIPTIONS.items()}
+_all = {**_base, **UNDERWRITING_CATEGORY_DESCRIPTIONS}
 
 domain = DomainConfig(
     name="aps",
     display_name="Attending Physician Statement",
     description="Medical record extraction for life insurance underwriting",
     section_types=[m.value for m in MedicalSectionType],
-    category_descriptions={cat.value: desc for cat, desc in CATEGORY_DESCRIPTIONS.items()},
+    category_descriptions=_all,
     prompts_module="scout_ai.prompts.templates.aps",
     synthesis_pipeline="scout_ai.domains.aps.synthesis.pipeline:SynthesisPipeline",
     validation_engine="scout_ai.domains.aps.validation.engine:RulesEngine",
