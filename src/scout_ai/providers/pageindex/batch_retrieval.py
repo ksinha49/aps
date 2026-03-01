@@ -57,10 +57,7 @@ class BatchRetrieval:
         # Group questions by category (str-keyed)
         by_category: dict[str, list[ExtractionQuestion]] = defaultdict(list)
         for q in questions:
-            cat_key = q.category
-            if hasattr(cat_key, "value"):
-                cat_key = cat_key.value
-            by_category[cat_key].append(q)
+            by_category[q.category].append(q)
 
         log.info(
             f"Batch retrieval: {len(questions)} questions in {len(by_category)} categories"

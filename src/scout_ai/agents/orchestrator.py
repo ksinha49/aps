@@ -75,10 +75,7 @@ class ExtractionPipeline:
         # Step 2: Extract answers per category (str-keyed)
         by_category: dict[str, list[ExtractionQuestion]] = defaultdict(list)
         for q in questions:
-            cat_key = q.category
-            if hasattr(cat_key, "value"):
-                cat_key = cat_key.value
-            by_category[cat_key].append(q)
+            by_category[q.category].append(q)
 
         results: list[BatchExtractionResult] = []
         for category_str, cat_questions in by_category.items():
@@ -171,8 +168,6 @@ def build_cited_context(
 
         title = node.get("title", "")
         ctype = node.get("content_type", "unknown")
-        if hasattr(ctype, "value"):
-            ctype = ctype.value
         start = node["start_index"]
         end = node["end_index"]
         header = "[Section: %s | Type: %s | Pages %d-%d]" % (title, ctype, start, end)
