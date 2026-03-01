@@ -111,6 +111,8 @@ class PersistenceConfig(BaseSettings):
     store_path: Path = Path("./indexes")
     s3_bucket: str = ""
     s3_prefix: str = "indexes/"
+    s3_kms_key_id: str = ""
+    s3_region: str = ""  # Falls back to top-level aws_region when empty
 
 
 class TokenizerConfig(BaseSettings):
@@ -262,6 +264,18 @@ class AppSettings(BaseSettings):
     """
 
     domain: str = "aps"
+    tenant_id: str = Field(
+        default="default",
+        description="Tenant/LOB identifier. Prefixed to all persistence keys for isolation.",
+    )
+    lob: str = Field(
+        default="*",
+        description="Line of business. Cascades to prompt and rules defaults if they are not set.",
+    )
+    aws_region: str = Field(
+        default="us-east-2",
+        description="Default AWS region. Cascades to subsystems when their region is not set.",
+    )
     llm: LLMConfig = LLMConfig()
     indexing: IndexingConfig = IndexingConfig()
     enrichment: EnrichmentConfig = EnrichmentConfig()
