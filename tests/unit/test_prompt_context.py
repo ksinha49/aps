@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pageindex_rag.prompts.context import PromptContext
+from scout_ai.prompts.context import PromptContext
 
 
 class TestPromptContext:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from pageindex_rag.formatters.json_formatter import JSONFormatter
-from pageindex_rag.synthesis.models import SynthesisSection, UnderwriterSummary
+from scout_ai.formatters.json_formatter import JSONFormatter
+from scout_ai.synthesis.models import SynthesisSection, UnderwriterSummary
 
 
 def _make_summary() -> UnderwriterSummary:

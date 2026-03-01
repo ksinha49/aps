@@ -2,37 +2,37 @@
 set -euo pipefail
 
 # RHEL on-premise installation script
-INSTALL_DIR="/opt/pageindex-rag"
+INSTALL_DIR="/opt/scout-ai"
 
-echo "Installing PageIndex RAG to ${INSTALL_DIR}..."
+echo "Installing Scout AI by Ameritas to ${INSTALL_DIR}..."
 
 # Create service user
-id -u pageindex &>/dev/null || useradd -r -s /sbin/nologin pageindex
+id -u scout &>/dev/null || useradd -r -s /sbin/nologin scout
 
 # Create directories
 mkdir -p "${INSTALL_DIR}"
-mkdir -p /var/log/pageindex-rag
+mkdir -p /var/log/scout-ai
 mkdir -p /data/indexes
 
 # Create virtualenv and install
 python3 -m venv "${INSTALL_DIR}/venv"
 "${INSTALL_DIR}/venv/bin/pip" install --upgrade pip
-"${INSTALL_DIR}/venv/bin/pip" install pageindex-rag[api,otel]
+"${INSTALL_DIR}/venv/bin/pip" install scout-ai[api,otel]
 
 # Copy systemd unit
-cp deploy/rhel/systemd/app.service /etc/systemd/system/pageindex-rag.service
+cp deploy/rhel/systemd/app.service /etc/systemd/system/scout-ai.service
 
 # Copy logrotate config
-cp deploy/rhel/logrotate.conf /etc/logrotate.d/pageindex-rag
+cp deploy/rhel/logrotate.conf /etc/logrotate.d/scout-ai
 
 # Set ownership
-chown -R pageindex:pageindex "${INSTALL_DIR}" /data/indexes /var/log/pageindex-rag
+chown -R scout:scout "${INSTALL_DIR}" /data/indexes /var/log/scout-ai
 
 # Enable and start
 systemctl daemon-reload
-systemctl enable pageindex-rag
-systemctl start pageindex-rag
+systemctl enable scout-ai
+systemctl start scout-ai
 
-echo "PageIndex RAG installed and started."
-echo "Check status: systemctl status pageindex-rag"
-echo "View logs: journalctl -u pageindex-rag -f"
+echo "Scout AI by Ameritas installed and started."
+echo "Check status: systemctl status scout-ai"
+echo "View logs: journalctl -u scout-ai -f"

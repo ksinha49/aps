@@ -16,7 +16,7 @@ test-integration:
 	pytest tests/integration/ -v
 
 test-cov:
-	pytest tests/ -v --cov=src/pageindex_rag --cov-report=term-missing
+	pytest tests/ -v --cov=src/scout_ai --cov-report=term-missing
 
 lint:
 	ruff check src/ tests/
@@ -35,7 +35,7 @@ clean:
 	rm -rf dist/ build/ *.egg-info
 
 docker-build:
-	docker build -f docker/Dockerfile -t pageindex-rag:latest .
+	docker build -f docker/Dockerfile -t scout-ai:latest .
 
 docker-run:
 	docker-compose -f docker/docker-compose.yml up -d

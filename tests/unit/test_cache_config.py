@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from pageindex_rag.core.config import AppSettings, CachingConfig, LLMConfig
+from scout_ai.core.config import AppSettings, CachingConfig, LLMConfig
 
 
 class TestCachingConfig:
@@ -18,9 +18,9 @@ class TestCachingConfig:
         assert cfg.ttl_type == "ephemeral"
 
     def test_env_var_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PAGEINDEX_CACHING_ENABLED", "true")
-        monkeypatch.setenv("PAGEINDEX_CACHING_MIN_CACHEABLE_TOKENS", "2048")
-        monkeypatch.setenv("PAGEINDEX_CACHING_TTL_TYPE", "long")
+        monkeypatch.setenv("SCOUT_CACHING_ENABLED", "true")
+        monkeypatch.setenv("SCOUT_CACHING_MIN_CACHEABLE_TOKENS", "2048")
+        monkeypatch.setenv("SCOUT_CACHING_TTL_TYPE", "long")
 
         cfg = CachingConfig()
         assert cfg.enabled is True
@@ -36,7 +36,7 @@ class TestCachingConfig:
 
 class TestLLMConfigProviders:
     def test_anthropic_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PAGEINDEX_LLM_PROVIDER", "anthropic")
+        monkeypatch.setenv("SCOUT_LLM_PROVIDER", "anthropic")
         cfg = LLMConfig()
         assert cfg.provider == "anthropic"
 

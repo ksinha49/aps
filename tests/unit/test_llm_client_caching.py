@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pageindex_rag.config import PageIndexSettings
-from pageindex_rag.providers.pageindex.client import LLMClient
+from scout_ai.config import ScoutSettings
+from scout_ai.providers.pageindex.client import LLMClient
 
 
-def _make_settings(**overrides: Any) -> PageIndexSettings:
+def _make_settings(**overrides: Any) -> ScoutSettings:
     defaults = {
         "llm_base_url": "http://localhost:4000/v1",
         "llm_api_key": "test-key",
@@ -20,7 +20,7 @@ def _make_settings(**overrides: Any) -> PageIndexSettings:
         "llm_max_retries": 1,
     }
     defaults.update(overrides)
-    return PageIndexSettings(**defaults)
+    return ScoutSettings(**defaults)
 
 
 def _mock_response(content: str = "test response") -> MagicMock:

@@ -1,10 +1,10 @@
 """Unit tests for data models."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 
-from pageindex_rag.models import (
+from scout_ai.models import (
     BatchExtractionResult,
     Citation,
     DocumentIndex,

@@ -2,8 +2,8 @@
 
 import pytest
 
-from pageindex_rag.exceptions import TokenizerError
-from pageindex_rag.providers.pageindex.tokenizer import TokenCounter
+from scout_ai.exceptions import TokenizerError
+from scout_ai.providers.pageindex.tokenizer import TokenCounter
 
 
 class TestApproximateTokenizer:

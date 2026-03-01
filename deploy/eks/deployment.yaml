@@ -1,37 +1,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pageindex-rag
+  name: scout-ai
   labels:
-    app: pageindex-rag
+    app: scout-ai
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: pageindex-rag
+      app: scout-ai
   template:
     metadata:
       labels:
-        app: pageindex-rag
+        app: scout-ai
     spec:
       containers:
-        - name: pageindex-rag
+        - name: scout-ai
           image: "${ECR_IMAGE_URI}"
           ports:
             - containerPort: 8080
           env:
-            - name: PAGEINDEX_LLM_PROVIDER
+            - name: SCOUT_LLM_PROVIDER
               value: "bedrock"
-            - name: PAGEINDEX_LLM_AWS_REGION
+            - name: SCOUT_LLM_AWS_REGION
               value: "us-west-2"
-            - name: PAGEINDEX_PERSISTENCE_BACKEND
+            - name: SCOUT_PERSISTENCE_BACKEND
               value: "s3"
-            - name: PAGEINDEX_PERSISTENCE_S3_BUCKET
+            - name: SCOUT_PERSISTENCE_S3_BUCKET
               valueFrom:
                 configMapKeyRef:
-                  name: pageindex-rag-config
+                  name: scout-ai-config
                   key: s3-bucket
-            - name: PAGEINDEX_OBSERVABILITY_ENABLE_TRACING
+            - name: SCOUT_OBSERVABILITY_ENABLE_TRACING
               value: "true"
           resources:
             requests:

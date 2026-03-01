@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from pageindex_rag.prompts.context import PromptContext
-from pageindex_rag.prompts.registry import (
+from scout_ai.prompts.context import PromptContext
+from scout_ai.prompts.registry import (
     configure,
     get_active_context,
     get_prompt,
@@ -97,25 +97,25 @@ class TestBackwardCompat:
     """Backward compatibility: aps/prompts.py __getattr__ returns same strings."""
 
     def test_aps_prompts_import(self) -> None:
-        from pageindex_rag.aps.prompts import TOC_DETECT_PROMPT
+        from scout_ai.aps.prompts import TOC_DETECT_PROMPT
 
         registry_prompt = get_prompt("aps", "indexing", "TOC_DETECT_PROMPT")
         assert TOC_DETECT_PROMPT == registry_prompt
 
     def test_aps_prompts_retrieval(self) -> None:
-        from pageindex_rag.aps.prompts import TREE_SEARCH_PROMPT
+        from scout_ai.aps.prompts import TREE_SEARCH_PROMPT
 
         registry_prompt = get_prompt("aps", "retrieval", "TREE_SEARCH_PROMPT")
         assert TREE_SEARCH_PROMPT == registry_prompt
 
     def test_aps_prompts_extraction(self) -> None:
-        from pageindex_rag.aps.prompts import BATCH_EXTRACTION_PROMPT
+        from scout_ai.aps.prompts import BATCH_EXTRACTION_PROMPT
 
         registry_prompt = get_prompt("aps", "extraction", "BATCH_EXTRACTION_PROMPT")
         assert BATCH_EXTRACTION_PROMPT == registry_prompt
 
     def test_template_module_import(self) -> None:
-        from pageindex_rag.prompts.templates.aps.indexing import GENERATE_TOC_INIT_PROMPT
+        from scout_ai.prompts.templates.aps.indexing import GENERATE_TOC_INIT_PROMPT
 
         registry_prompt = get_prompt("aps", "indexing", "GENERATE_TOC_INIT_PROMPT")
         assert GENERATE_TOC_INIT_PROMPT == registry_prompt

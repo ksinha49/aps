@@ -1,14 +1,14 @@
 [Unit]
-Description=PageIndex RAG API Server
+Description=Scout AI by Ameritas API Server
 After=network.target
 
 [Service]
 Type=simple
-User=pageindex
-Group=pageindex
-WorkingDirectory=/opt/pageindex-rag
-EnvironmentFile=/opt/pageindex-rag/.env
-ExecStart=/opt/pageindex-rag/venv/bin/uvicorn pageindex_rag.api.app:app --host 0.0.0.0 --port 8080
+User=scout
+Group=scout
+WorkingDirectory=/opt/scout-ai
+EnvironmentFile=/opt/scout-ai/.env
+ExecStart=/opt/scout-ai/venv/bin/uvicorn scout_ai.api.app:app --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=5
 StandardOutput=journal

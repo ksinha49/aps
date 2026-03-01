@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pageindex-rag"
+name = "scout-ai"
 version = "0.2.0"
-description = "Standalone vectorless RAG module using internalized PageIndex tree indexing"
+description = "Scout AI by Ameritas — APS document intelligence with hierarchical tree indexing"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -42,10 +42,10 @@ dev = [
 ]
 
 [project.scripts]
-pageindex-rag = "pageindex_rag.cli.main:app"
+scout-ai = "scout_ai.cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pageindex_rag"]
+packages = ["src/scout_ai"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

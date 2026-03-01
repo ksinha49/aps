@@ -1,4 +1,4 @@
-"""Integration tests for PageIndexIndexer with mocked LLM via litellm."""
+"""Integration tests for ScoutIndexer with mocked LLM via litellm."""
 
 from __future__ import annotations
 
@@ -8,10 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pageindex_rag.config import PageIndexSettings
-from pageindex_rag.models import PageContent
-from pageindex_rag.providers.pageindex.client import LLMClient
-from pageindex_rag.providers.pageindex.indexer import PageIndexIndexer
+from scout_ai.config import ScoutSettings
+from scout_ai.providers.pageindex.client import LLMClient
+from scout_ai.providers.pageindex.indexer import ScoutIndexer
 
 
 def _litellm_response(content: str) -> MagicMock:
@@ -28,7 +27,7 @@ def _litellm_response(content: str) -> MagicMock:
 
 @pytest.fixture
 def mock_settings():
-    return PageIndexSettings(
+    return ScoutSettings(
         llm_base_url="http://test-llm:4000/v1",
         llm_api_key="test-key",
         llm_model="test-model",
@@ -48,7 +47,7 @@ def mock_client(mock_settings):
 
 @pytest.fixture
 def indexer(mock_settings, mock_client):
-    return PageIndexIndexer(mock_settings, mock_client)
+    return ScoutIndexer(mock_settings, mock_client)
 
 
 @pytest.mark.asyncio
@@ -87,7 +86,7 @@ class TestIndexerNoToc:
         # Disable medical classification to force LLM path
         mock_settings.enable_medical_classification = False
         client = LLMClient(mock_settings)
-        indexer = PageIndexIndexer(mock_settings, client)
+        indexer = ScoutIndexer(mock_settings, client)
 
         toc_response = json.dumps({"thinking": "no toc", "toc_detected": "no"})
         generated_toc = json.dumps([

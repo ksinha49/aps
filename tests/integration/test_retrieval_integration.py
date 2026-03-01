@@ -8,16 +8,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pageindex_rag.config import PageIndexSettings
-from pageindex_rag.models import (
+from scout_ai.config import ScoutSettings
+from scout_ai.models import (
     DocumentIndex,
     ExtractionCategory,
     ExtractionQuestion,
     MedicalSectionType,
     TreeNode,
 )
-from pageindex_rag.providers.pageindex.client import LLMClient
-from pageindex_rag.providers.pageindex.retrieval import PageIndexRetrieval
+from scout_ai.providers.pageindex.client import LLMClient
+from scout_ai.providers.pageindex.retrieval import ScoutRetrieval
 
 
 def _litellm_response(content: str) -> MagicMock:
@@ -74,13 +74,13 @@ def test_index() -> DocumentIndex:
 
 @pytest.fixture
 def retrieval():
-    settings = PageIndexSettings(
+    settings = ScoutSettings(
         llm_base_url="http://test-llm:4000/v1",
         llm_api_key="test-key",
         llm_model="test-model",
     )
     client = LLMClient(settings)
-    return PageIndexRetrieval(settings, client)
+    return ScoutRetrieval(settings, client)
 
 
 @pytest.mark.asyncio

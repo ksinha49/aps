@@ -1,4 +1,4 @@
-# pageindex-rag
+# scout-ai
 
 Standalone vectorless RAG module using internalized PageIndex tree indexing. Builds hierarchical tree indexes from pre-OCR'd document pages and uses LLM reasoning for retrieval and extraction — no vector embeddings required.
 
@@ -33,7 +33,7 @@ Requires Python 3.10+.
 ### 1. Build a tree index
 
 ```bash
-pageindex-rag index pages.json \
+scout-ai index pages.json \
   --doc-id aps-001 \
   --doc-name "John Doe APS" \
   --base-url http://localhost:4000/v1 \
@@ -47,7 +47,7 @@ Where `pages.json` is a JSON array of `{"page_number": int, "text": str}` object
 ### 2. Search the index
 
 ```bash
-pageindex-rag retrieve index.json "blood pressure readings" \
+scout-ai retrieve index.json "blood pressure readings" \
   --base-url http://localhost:4000/v1 \
   --api-key your-key \
   --model qwen3-14b
@@ -56,7 +56,7 @@ pageindex-rag retrieve index.json "blood pressure readings" \
 ### 3. Extract answers
 
 ```bash
-pageindex-rag extract index.json questions.json \
+scout-ai extract index.json questions.json \
   --base-url http://localhost:4000/v1 \
   --api-key your-key \
   --model qwen3-14b \
@@ -80,7 +80,7 @@ Where `questions.json` is a JSON array of:
 
 ```python
 import asyncio
-from pageindex_rag import (
+from scout_ai import (
     PageIndexSettings,
     PageContent,
     LLMClient,
@@ -157,7 +157,7 @@ All settings are configurable via environment variables with the `PAGEINDEX_` pr
 ## Architecture
 
 ```
-src/pageindex_rag/
+src/scout_ai/
   config.py                           # Pydantic Settings (env-driven)
   models.py                           # All Pydantic data models
   exceptions.py                       # Exception hierarchy

@@ -2,8 +2,8 @@
 
 import pytest
 
-from pageindex_rag.models import MedicalSectionType, PageContent
-from pageindex_rag.providers.pageindex.medical_classifier import MedicalSectionClassifier
+from scout_ai.models import MedicalSectionType, PageContent
+from scout_ai.providers.pageindex.medical_classifier import MedicalSectionClassifier
 
 
 @pytest.fixture

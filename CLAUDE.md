@@ -33,7 +33,7 @@ ruff check src/ tests/
 mypy src/
 
 # Run API server locally
-uvicorn pageindex_rag.api.app:app --host 0.0.0.0 --port 8080
+uvicorn scout_ai.api.app:app --host 0.0.0.0 --port 8080
 
 # Docker (production)
 docker compose -f docker/docker-compose.yml up --build
@@ -66,9 +66,9 @@ ExtractionQuestion[] → ExtractionPipeline → BatchExtractionResult[]
 ### Directory Structure
 
 ```
-src/pageindex_rag/
+src/scout_ai/
 ├── __init__.py                   # Public API (legacy + Strands-era exports)
-├── config.py                     # Legacy PageIndexSettings
+├── config.py                     # Legacy ScoutSettings
 ├── models.py                     # All Pydantic data models
 ├── exceptions.py                 # Exception hierarchy
 │
@@ -120,10 +120,10 @@ src/pageindex_rag/
 │
 ├── providers/pageindex/          # Legacy provider implementations (still functional)
 │   ├── client.py                 # LLMClient (AsyncOpenAI wrapper)
-│   ├── indexer.py                # PageIndexIndexer (3-mode cascade)
-│   ├── retrieval.py              # PageIndexRetrieval
+│   ├── indexer.py                # ScoutIndexer (3-mode cascade)
+│   ├── retrieval.py              # ScoutRetrieval
 │   ├── batch_retrieval.py        # BatchRetrieval (category-grouped)
-│   ├── chat.py                   # PageIndexChat (tiered extraction)
+│   ├── chat.py                   # ScoutChat (tiered extraction)
 │   ├── medical_classifier.py     # Re-export shim → domains.aps.classifier
 │   ├── tree_builder.py           # Tree construction
 │   ├── tree_utils.py             # Tree traversal utilities
@@ -150,7 +150,7 @@ src/pageindex_rag/
 - **Skill decomposition**: Each `@tool` returns JSON instructions for the agent to reason over. Companion pure-logic functions (`*_sync`, `resolve_*`, `parse_*`) handle deterministic post-processing without LLM calls.
 - **Hook lifecycle**: `AuditHook` logs all activity, `CostHook` tracks tokens via ContextVar, `CheckpointHook` persists state after tool success, `CircuitBreakerHook` prevents cascading failures, `DeadLetterHook` captures failures.
 - **Model provider factory**: `agents/factory.py` switches between `BedrockModel`, `OpenAIModel`, `OllamaModel`, `LiteLLMModel` based on `settings.llm.provider`.
-- **Legacy backward compat**: All original imports from `pageindex_rag.*` still work. Old `aps/` and `providers/pageindex/medical_classifier.py` files are thin re-export shims.
+- **Legacy backward compat**: All original imports from `scout_ai.*` still work. Old `aps/` and `providers/pageindex/medical_classifier.py` files are thin re-export shims.
 - **Prompt registry**: `get_prompt("aps", "indexing", "DETECT_TOC_PROMPT")` lazy-loads from `prompts/templates/aps/indexing.py`.
 - **Pluggable persistence**: `IPersistenceBackend` Protocol with file, S3, and memory implementations.
 - All LLM interaction in legacy path goes through `LLMClient.complete()` / `complete_batch()`.
@@ -163,15 +163,15 @@ All settings use pydantic-settings with env var prefixes:
 
 | Prefix | Config Class | Purpose |
 |--------|-------------|---------|
-| `PAGEINDEX_LLM_` | `LLMConfig` | Model provider, API key, temperature |
-| `PAGEINDEX_INDEXING_` | `IndexingConfig` | TOC detection, node limits |
-| `PAGEINDEX_ENRICHMENT_` | `EnrichmentConfig` | Summary, classification toggles |
-| `PAGEINDEX_RETRIEVAL_` | `RetrievalConfig` | Concurrency, top-k |
-| `PAGEINDEX_EXTRACTION_` | `ExtractionConfig` | Context limits, batch size |
-| `PAGEINDEX_PERSISTENCE_` | `PersistenceConfig` | Backend type, S3 bucket |
-| `PAGEINDEX_TOKENIZER_` | `TokenizerConfig` | Counter method |
-| `PAGEINDEX_OBSERVABILITY_` | `ObservabilityConfig` | Tracing, OTLP endpoint, log level |
-| `PAGEINDEX_PDF_` | `PDFFormattingConfig` | PDF output formatting (page size, fonts, watermark) |
+| `SCOUT_LLM_` | `LLMConfig` | Model provider, API key, temperature |
+| `SCOUT_INDEXING_` | `IndexingConfig` | TOC detection, node limits |
+| `SCOUT_ENRICHMENT_` | `EnrichmentConfig` | Summary, classification toggles |
+| `SCOUT_RETRIEVAL_` | `RetrievalConfig` | Concurrency, top-k |
+| `SCOUT_EXTRACTION_` | `ExtractionConfig` | Context limits, batch size |
+| `SCOUT_PERSISTENCE_` | `PersistenceConfig` | Backend type, S3 bucket |
+| `SCOUT_TOKENIZER_` | `TokenizerConfig` | Counter method |
+| `SCOUT_OBSERVABILITY_` | `ObservabilityConfig` | Tracing, OTLP endpoint, log level |
+| `SCOUT_PDF_` | `PDFFormattingConfig` | PDF output formatting (page size, fonts, watermark) |
 
 ### Deployment Targets
 

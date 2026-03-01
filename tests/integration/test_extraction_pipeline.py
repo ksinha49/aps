@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pageindex_rag.config import PageIndexSettings
-from pageindex_rag.models import (
+from scout_ai.config import ScoutSettings
+from scout_ai.models import (
     DocumentIndex,
     ExtractionCategory,
     ExtractionQuestion,
@@ -17,10 +17,10 @@ from pageindex_rag.models import (
     PageContent,
     TreeNode,
 )
-from pageindex_rag.providers.pageindex.chat import PageIndexChat
-from pageindex_rag.providers.pageindex.client import LLMClient
-from pageindex_rag.providers.pageindex.retrieval import PageIndexRetrieval
-from pageindex_rag.services.extraction_service import ExtractionService
+from scout_ai.providers.pageindex.chat import ScoutChat
+from scout_ai.providers.pageindex.client import LLMClient
+from scout_ai.providers.pageindex.retrieval import ScoutRetrieval
+from scout_ai.services.extraction_service import ExtractionService
 
 
 def _litellm_response(content: str) -> MagicMock:
@@ -65,14 +65,14 @@ def test_index() -> DocumentIndex:
 
 @pytest.fixture
 def pipeline():
-    settings = PageIndexSettings(
+    settings = ScoutSettings(
         llm_base_url="http://test-llm:4000/v1",
         llm_api_key="test-key",
         llm_model="test-model",
     )
     client = LLMClient(settings)
-    retrieval = PageIndexRetrieval(settings, client)
-    chat = PageIndexChat(settings, client)
+    retrieval = ScoutRetrieval(settings, client)
+    chat = ScoutChat(settings, client)
     return ExtractionService(retrieval, chat)
 
 

@@ -6,10 +6,10 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - PAGEINDEX_LLM_PROVIDER=ollama
-      - PAGEINDEX_LLM_BASE_URL=http://host.docker.internal:11434/v1
-      - PAGEINDEX_OBSERVABILITY_ENABLE_TRACING=true
-      - PAGEINDEX_OBSERVABILITY_OTLP_ENDPOINT=http://jaeger:4317
+      - SCOUT_LLM_PROVIDER=ollama
+      - SCOUT_LLM_BASE_URL=http://host.docker.internal:11434/v1
+      - SCOUT_OBSERVABILITY_ENABLE_TRACING=true
+      - SCOUT_OBSERVABILITY_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
       - index-data:/data/indexes
     depends_on:

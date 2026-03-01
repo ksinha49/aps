@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from pageindex_rag.formatters.json_formatter import JSONFormatter
-from pageindex_rag.formatters.protocols import IOutputFormatter
+from scout_ai.formatters.json_formatter import JSONFormatter
+from scout_ai.formatters.protocols import IOutputFormatter
 
 
 class TestJSONFormatterSatisfiesProtocol:
@@ -28,21 +28,21 @@ class TestPDFFormatterSatisfiesProtocol:
         pytest.importorskip("reportlab")
 
     def test_isinstance_check(self) -> None:
-        from pageindex_rag.formatters.pdf_formatter import PDFFormatter
+        from scout_ai.formatters.pdf_formatter import PDFFormatter
 
         assert isinstance(PDFFormatter(), IOutputFormatter)
 
     def test_has_format_method(self) -> None:
-        from pageindex_rag.formatters.pdf_formatter import PDFFormatter
+        from scout_ai.formatters.pdf_formatter import PDFFormatter
 
         assert callable(getattr(PDFFormatter, "format", None))
 
     def test_has_format_to_file_method(self) -> None:
-        from pageindex_rag.formatters.pdf_formatter import PDFFormatter
+        from scout_ai.formatters.pdf_formatter import PDFFormatter
 
         assert callable(getattr(PDFFormatter, "format_to_file", None))
 
     def test_has_content_type_property(self) -> None:
-        from pageindex_rag.formatters.pdf_formatter import PDFFormatter
+        from scout_ai.formatters.pdf_formatter import PDFFormatter
 
         assert hasattr(PDFFormatter, "content_type")

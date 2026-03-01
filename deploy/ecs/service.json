@@ -1,7 +1,7 @@
 {
-  "serviceName": "pageindex-rag",
+  "serviceName": "scout-ai",
   "cluster": "${ECS_CLUSTER}",
-  "taskDefinition": "pageindex-rag",
+  "taskDefinition": "scout-ai",
   "desiredCount": 2,
   "launchType": "FARGATE",
   "networkConfiguration": {
@@ -14,7 +14,7 @@
   "loadBalancers": [
     {
       "targetGroupArn": "${TARGET_GROUP_ARN}",
-      "containerName": "pageindex-rag",
+      "containerName": "scout-ai",
       "containerPort": 8080
     }
   ],

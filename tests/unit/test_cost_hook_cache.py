@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pageindex_rag.hooks.cost_hook import CostHook, UsageSummary, get_current_usage, reset_usage
+from scout_ai.hooks.cost_hook import CostHook, UsageSummary, get_current_usage, reset_usage
 
 
 class TestUsageSummary:

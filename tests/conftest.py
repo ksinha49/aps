@@ -1,17 +1,17 @@
-"""Shared fixtures for pageindex-rag tests."""
+"""Shared fixtures for scout-ai tests."""
 
 from __future__ import annotations
 
 import pytest
 
-from pageindex_rag.config import PageIndexSettings
-from pageindex_rag.models import PageContent, TreeNode, MedicalSectionType
+from scout_ai.config import ScoutSettings
+from scout_ai.models import MedicalSectionType, PageContent, TreeNode
 
 
 @pytest.fixture
-def settings() -> PageIndexSettings:
+def settings() -> ScoutSettings:
     """Default test settings (approximate tokenizer, no real LLM)."""
-    return PageIndexSettings(
+    return ScoutSettings(
         llm_base_url="http://localhost:11434/v1",
         llm_api_key="test-key",
         llm_model="test-model",

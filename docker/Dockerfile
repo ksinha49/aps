@@ -26,9 +26,9 @@ RUN chmod +x /entrypoint.sh
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PAGEINDEX_OBSERVABILITY_LOG_LEVEL=INFO \
-    PAGEINDEX_PERSISTENCE_BACKEND=file \
-    PAGEINDEX_PERSISTENCE_STORE_PATH=/data/indexes
+    SCOUT_OBSERVABILITY_LOG_LEVEL=INFO \
+    SCOUT_PERSISTENCE_BACKEND=file \
+    SCOUT_PERSISTENCE_STORE_PATH=/data/indexes
 
 RUN mkdir -p /data/indexes
 
@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 USER 1001
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "pageindex_rag.api.app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "scout_ai.api.app:app", "--host", "0.0.0.0", "--port", "8080"]

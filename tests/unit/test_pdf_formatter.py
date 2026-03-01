@@ -6,13 +6,13 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from pageindex_rag.core.config import PDFFormattingConfig
-from pageindex_rag.synthesis.models import SynthesisSection, UnderwriterSummary
+from scout_ai.core.config import PDFFormattingConfig
+from scout_ai.synthesis.models import SynthesisSection, UnderwriterSummary
 
 # Skip the entire module if reportlab is not installed
 reportlab = pytest.importorskip("reportlab")
 
-from pageindex_rag.formatters.pdf_formatter import PDFFormatter  # noqa: E402
+from scout_ai.formatters.pdf_formatter import PDFFormatter  # noqa: E402
 
 
 def _make_summary(

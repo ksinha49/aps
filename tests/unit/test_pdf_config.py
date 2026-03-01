@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pageindex_rag.core.config import PDFFormattingConfig
+from scout_ai.core.config import PDFFormattingConfig
 
 
 class TestPDFFormattingConfigDefaults:
@@ -45,34 +45,34 @@ class TestPDFFormattingConfigDefaults:
 
 class TestPDFFormattingConfigEnvOverrides:
     def test_page_size_from_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("PAGEINDEX_PDF_PAGE_SIZE", "a4")
+        monkeypatch.setenv("SCOUT_PDF_PAGE_SIZE", "a4")
         cfg = PDFFormattingConfig()
         assert cfg.page_size == "a4"
 
     def test_margin_from_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("PAGEINDEX_PDF_MARGIN_INCHES", "1.0")
+        monkeypatch.setenv("SCOUT_PDF_MARGIN_INCHES", "1.0")
         cfg = PDFFormattingConfig()
         assert cfg.margin_inches == 1.0
 
     def test_include_appendix_from_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("PAGEINDEX_PDF_INCLUDE_APPENDIX", "false")
+        monkeypatch.setenv("SCOUT_PDF_INCLUDE_APPENDIX", "false")
         cfg = PDFFormattingConfig()
         assert cfg.include_appendix is False
 
     def test_company_name_from_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("PAGEINDEX_PDF_COMPANY_NAME", "Acme Insurance")
+        monkeypatch.setenv("SCOUT_PDF_COMPANY_NAME", "Acme Insurance")
         cfg = PDFFormattingConfig()
         assert cfg.company_name == "Acme Insurance"
 
     def test_confidential_watermark_from_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("PAGEINDEX_PDF_CONFIDENTIAL_WATERMARK", "false")
+        monkeypatch.setenv("SCOUT_PDF_CONFIDENTIAL_WATERMARK", "false")
         cfg = PDFFormattingConfig()
         assert cfg.confidential_watermark is False
 
 
 class TestPDFConfigInAppSettings:
     def test_app_settings_has_pdf(self) -> None:
-        from pageindex_rag.core.config import AppSettings
+        from scout_ai.core.config import AppSettings
 
         settings = AppSettings()
         assert hasattr(settings, "pdf")

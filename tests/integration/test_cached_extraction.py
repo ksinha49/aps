@@ -8,18 +8,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pageindex_rag.config import PageIndexSettings
-from pageindex_rag.models import (
+from scout_ai.config import ScoutSettings
+from scout_ai.models import (
     DocumentIndex,
     ExtractionCategory,
     ExtractionQuestion,
     MedicalSectionType,
     TreeNode,
 )
-from pageindex_rag.providers.pageindex.chat import PageIndexChat
-from pageindex_rag.providers.pageindex.client import LLMClient
-from pageindex_rag.providers.pageindex.retrieval import PageIndexRetrieval
-from pageindex_rag.services.extraction_service import ExtractionService
+from scout_ai.providers.pageindex.chat import ScoutChat
+from scout_ai.providers.pageindex.client import LLMClient
+from scout_ai.providers.pageindex.retrieval import ScoutRetrieval
+from scout_ai.services.extraction_service import ExtractionService
 
 
 def _mock_response(content: str) -> MagicMock:
@@ -35,8 +35,8 @@ def _mock_response(content: str) -> MagicMock:
 
 
 @pytest.fixture
-def settings() -> PageIndexSettings:
-    return PageIndexSettings(
+def settings() -> ScoutSettings:
+    return ScoutSettings(
         llm_base_url="http://test-llm:4000/v1",
         llm_api_key="test-key",
         llm_model="anthropic/claude-sonnet-4-20250514",
@@ -110,12 +110,12 @@ def questions() -> list[ExtractionQuestion]:
 @pytest.mark.asyncio
 class TestCachedExtraction:
     async def test_extraction_with_caching_enabled(
-        self, settings: PageIndexSettings, test_index: DocumentIndex, questions: list[ExtractionQuestion]
+        self, settings: ScoutSettings, test_index: DocumentIndex, questions: list[ExtractionQuestion]
     ) -> None:
         """Extraction with cache_enabled=True sends system_prompt with cache_control."""
         client = LLMClient(settings)
-        retrieval = PageIndexRetrieval(settings, client)
-        chat = PageIndexChat(settings, client, cache_enabled=True)
+        retrieval = ScoutRetrieval(settings, client)
+        chat = ScoutChat(settings, client, cache_enabled=True)
         service = ExtractionService(retrieval, chat)
 
         captured_calls: list[dict[str, Any]] = []
@@ -173,12 +173,12 @@ class TestCachedExtraction:
             assert "Document Context:" in content_block["text"]
 
     async def test_extraction_without_caching(
-        self, settings: PageIndexSettings, test_index: DocumentIndex, questions: list[ExtractionQuestion]
+        self, settings: ScoutSettings, test_index: DocumentIndex, questions: list[ExtractionQuestion]
     ) -> None:
         """Extraction with cache_enabled=False uses legacy single-message format."""
         client = LLMClient(settings)
-        retrieval = PageIndexRetrieval(settings, client)
-        chat = PageIndexChat(settings, client, cache_enabled=False)
+        retrieval = ScoutRetrieval(settings, client)
+        chat = ScoutChat(settings, client, cache_enabled=False)
         service = ExtractionService(retrieval, chat)
 
         captured_calls: list[dict[str, Any]] = []

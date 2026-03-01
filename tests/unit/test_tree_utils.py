@@ -1,9 +1,8 @@
 """Unit tests for tree_utils pure functions."""
 
-import pytest
 
-from pageindex_rag.models import MedicalSectionType, PageContent, TreeNode
-from pageindex_rag.providers.pageindex.tree_utils import (
+from scout_ai.models import TreeNode
+from scout_ai.providers.pageindex.tree_utils import (
     add_node_text,
     add_preface_if_needed,
     convert_physical_index_to_int,

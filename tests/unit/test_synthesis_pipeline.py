@@ -6,21 +6,21 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from pageindex_rag.config import PageIndexSettings
-from pageindex_rag.models import (
+from scout_ai.config import ScoutSettings
+from scout_ai.models import (
     BatchExtractionResult,
     Citation,
     ExtractionCategory,
     ExtractionResult,
     RetrievalResult,
 )
-from pageindex_rag.providers.pageindex.client import LLMClient
-from pageindex_rag.synthesis.models import SynthesisSection, UnderwriterSummary
-from pageindex_rag.synthesis.pipeline import SynthesisPipeline
+from scout_ai.providers.pageindex.client import LLMClient
+from scout_ai.synthesis.models import SynthesisSection, UnderwriterSummary
+from scout_ai.synthesis.pipeline import SynthesisPipeline
 
 
-def _make_settings() -> PageIndexSettings:
-    return PageIndexSettings(
+def _make_settings() -> ScoutSettings:
+    return ScoutSettings(
         llm_base_url="http://localhost:4000/v1",
         llm_api_key="test-key",
         llm_model="test-model",

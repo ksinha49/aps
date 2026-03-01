@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from pageindex_rag.prompts.backends.dynamodb_backend import DynamoDBPromptBackend
-from pageindex_rag.prompts.context import PromptContext
-from pageindex_rag.prompts.registry import get_prompt, reset
+from scout_ai.prompts.backends.dynamodb_backend import DynamoDBPromptBackend
+from scout_ai.prompts.context import PromptContext
+from scout_ai.prompts.registry import get_prompt, reset
 
 
 class FakeDynamoDBClient:
@@ -186,9 +186,9 @@ class TestRegistryWithDynamoDBFallback:
 
     def test_dynamodb_miss_falls_back_to_file(self) -> None:
         fake = FakeDynamoDBClient()
-        from pageindex_rag.prompts import registry
-        from pageindex_rag.prompts.backends.dynamodb_backend import DynamoDBPromptBackend as DDB
-        from pageindex_rag.prompts.backends.file_backend import FilePromptBackend
+        from scout_ai.prompts import registry
+        from scout_ai.prompts.backends.dynamodb_backend import DynamoDBPromptBackend as DDB
+        from scout_ai.prompts.backends.file_backend import FilePromptBackend
 
         ddb = DDB(table_name="test", boto3_client=fake)
         registry._primary_backend = ddb

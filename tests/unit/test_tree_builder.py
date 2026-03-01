@@ -2,8 +2,8 @@
 
 import pytest
 
-from pageindex_rag.providers.pageindex.tokenizer import TokenCounter
-from pageindex_rag.providers.pageindex.tree_builder import TreeBuilder
+from scout_ai.providers.pageindex.tokenizer import TokenCounter
+from scout_ai.providers.pageindex.tree_builder import TreeBuilder
 
 
 @pytest.fixture

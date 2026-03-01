@@ -1,12 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  DynamoDB table for pageindex-rag prompt storage.
+  DynamoDB table for scout-ai prompt storage.
   Stores versioned prompt templates with business-dimension lookups via GSI.
 
 Parameters:
   TableName:
     Type: String
-    Default: pageindex-prompts
+    Default: scout-prompts
     Description: Name of the DynamoDB table for prompt storage.
 
   Environment:
@@ -20,7 +20,7 @@ Parameters:
 
   ProjectTag:
     Type: String
-    Default: pageindex-rag
+    Default: scout-ai
     Description: Project tag applied to all resources.
 
 Resources:

@@ -1,0 +1,5 @@
+"""Backward-compat shim — canonical location is domains.aps.section_patterns."""
+
+from scout_ai.domains.aps.section_patterns import SECTION_PATTERNS
+
+__all__ = ["SECTION_PATTERNS"]
