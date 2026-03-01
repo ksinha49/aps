@@ -1,215 +1,364 @@
-# scout-ai
+# Scout AI — Enterprise Document Intelligence Platform
 
-Standalone vectorless RAG module using internalized PageIndex tree indexing. Builds hierarchical tree indexes from pre-OCR'd document pages and uses LLM reasoning for retrieval and extraction — no vector embeddings required.
+> **Ameritas Enterprise Seed Project** — A reusable, extensible foundation for building document extraction and analysis solutions across business lines.
 
-Designed for processing Attending Physician Statements (APS) and medical records on-premise with any OpenAI-compatible LLM endpoint (vLLM, LiteLLM, Ollama, or OpenAI).
+Scout AI is a **vectorless Retrieval-Augmented Generation (RAG)** platform that builds hierarchical tree indexes from pre-OCR'd document pages and uses LLM reasoning for retrieval and extraction — no embeddings or vector databases required. It ships with a production-ready **APS (Attending Physician Statement)** domain for life insurance underwriting, and is designed from day one to be forked and extended for any document-heavy workflow at Ameritas.
 
-## Features
+---
 
-- **Vectorless retrieval** — Tree-indexed search using LLM reasoning over document structure instead of embedding similarity
-- **Any LLM backend** — Works with vLLM, LiteLLM, Ollama, or OpenAI via configurable `base_url`
-- **Pre-OCR'd input** — Accepts `List[PageContent]` (page number + text); no PDF parsing dependencies
-- **Medical-domain heuristics** — Regex-based section detection for 15 APS section types before falling back to LLM
-- **Category-batched retrieval** — Groups questions by 16 extraction categories, reducing hundreds of LLM calls to ~16
-- **Tiered extraction** — Tier 1 batches simple lookups (20 per prompt), Tier 2/3 uses individual reasoning chains
-- **Plugin-ready interfaces** — Abstract base classes allow swapping retrieval/indexing providers
+## Why This Exists
 
-## Installation
+Ameritas processes thousands of structured and semi-structured documents across life insurance, dental, vision, disability, and retirement services. Each line of business has its own document types, extraction categories, synthesis logic, and reporting formats — but the underlying RAG mechanics (index, retrieve, extract, synthesize, format) are identical.
+
+**Without a seed project**, every team builds its own:
+- Document parsing pipeline
+- LLM integration layer
+- Question/answer extraction framework
+- PDF report generation
+- Observability and cost tracking
+- Deployment configs
+
+**With Scout AI as the seed**, teams inherit all of that and only write what's unique to their domain: questions, categories, synthesis rules, and output templates.
+
+---
+
+## Enterprise Reusability
+
+### What You Get Out of the Box
+
+| Capability | Implementation | Reuse Level |
+|---|---|---|
+| Document indexing | 3-mode cascade (heuristic → guided LLM → full LLM) | Direct reuse |
+| Tree-based retrieval | LLM-reasoned search over hierarchical index | Direct reuse |
+| Tiered extraction | Batch (Tier 1) + individual reasoning (Tier 2/3) | Direct reuse |
+| LLM provider switching | Bedrock, OpenAI, Ollama, LiteLLM, vLLM | Direct reuse |
+| Observability | Audit logging, token cost tracking, OpenTelemetry | Direct reuse |
+| Resilience | Circuit breaker, dead letter queue, checkpointing | Direct reuse |
+| Persistence | File, S3, in-memory backends via Protocol | Direct reuse |
+| PDF generation | reportlab-based with configurable styles | Extend per domain |
+| Synthesis pipeline | Deterministic post-processing framework | Extend per domain |
+| Question templates | JSON-driven, category-grouped | **New per domain** |
+| Category descriptions | Dict-based retrieval hints for the LLM | **New per domain** |
+| Section classifiers | Regex-first, LLM fallback | **New per domain** |
+
+### The 80/20 Rule
+
+For a typical new domain, **~80% of the codebase is reused unchanged**. The ~20% you write:
+
+1. **`__domain__.py`** — A manifest file (~30 lines) declaring your domain name, categories, formatters, and dotted-path references
+2. **`categories.py`** — Category descriptions that tell the retrieval LLM where to look in documents
+3. **`questions/*.json`** — Your extraction questions (the "what to extract" specification)
+4. **`models.py`** — Domain-specific data models (e.g., `YNCondition` for underwriting, `InjuryDetail` for workers' comp)
+5. **`synthesis/pipeline.py`** — Deterministic logic that transforms raw extraction results into structured summaries
+6. **`formatters/`** — PDF/JSON templates for your output reports
+
+Everything else — the agents, hooks, persistence, providers, API layer, CLI, Docker configs — works as-is.
+
+---
+
+## Extensibility Architecture
+
+### Domain Registry (Convention-Based Auto-Discovery)
+
+```mermaid
+flowchart TD
+    A[DomainRegistry.auto_discover] --> B[Scan scout_ai/domains/*/]
+    B --> C{Has __domain__.py?}
+    C -->|Yes| D[Import DomainConfig]
+    C -->|No| E[Skip]
+    D --> F[Register in global registry]
+
+    subgraph "Registered Domains"
+        G[aps — Life Insurance APS]
+        H[workers_comp — Workers' Compensation]
+        I[your_domain — Your New Domain]
+    end
+
+    F --> G
+    F --> H
+    F --> I
+```
+
+To add a new domain, create a package under `src/scout_ai/domains/` with a `__domain__.py`:
+
+```python
+# src/scout_ai/domains/disability/__domain__.py
+from scout_ai.domains.registry import DomainConfig
+from scout_ai.domains.disability.categories import CATEGORY_DESCRIPTIONS
+
+domain = DomainConfig(
+    name="disability",
+    display_name="Disability Claims",
+    description="Disability claim document extraction and analysis",
+    category_descriptions=CATEGORY_DESCRIPTIONS,
+    prompts_module="scout_ai.domains.disability.prompts",
+    synthesis_pipeline="scout_ai.domains.disability.synthesis:DisabilitySynthesis",
+    formatters={"pdf": "scout_ai.domains.disability.formatters:DisabilityPDFFormatter"},
+)
+```
+
+That's it. The registry discovers it at startup. No wiring code, no factory edits, no config changes.
+
+### Pluggable LLM Providers
+
+```mermaid
+flowchart LR
+    A[AppSettings.llm.provider] --> B{Provider?}
+    B -->|bedrock| C[BedrockModel — AWS production]
+    B -->|openai| D[OpenAIModel — OpenAI / vLLM / LiteLLM]
+    B -->|ollama| E[OllamaModel — Local development]
+    B -->|litellm| F[LiteLLMModel — Universal proxy]
+```
+
+Switch providers with a single environment variable. No code changes. Local dev uses Ollama; staging uses vLLM behind LiteLLM; production uses Bedrock.
+
+### Pluggable Persistence
+
+```mermaid
+flowchart LR
+    A[IPersistenceBackend Protocol] --> B[FilePersistence — local JSON]
+    A --> C[S3Persistence — AWS S3]
+    A --> D[MemoryPersistence — tests]
+    A --> E[Your Backend — DynamoDB / Redis / etc.]
+```
+
+Implement 5 methods (`save`, `load`, `exists`, `delete`, `list_keys`) and your backend works everywhere.
+
+### Hook Lifecycle (Observability Without Code Changes)
+
+```mermaid
+flowchart TD
+    A[Agent Call] --> B[AuditHook — structured log]
+    B --> C[CostHook — token accumulator]
+    C --> D[CircuitBreakerHook — failure gate]
+    D -->|CLOSED| E[Execute Skill]
+    D -->|OPEN| F[Fail Fast]
+    E -->|Success| G[CheckpointHook — persist state]
+    E -->|Failure| H[DeadLetterHook — capture for analysis]
+    H --> I[CircuitBreakerHook — increment failures]
+```
+
+Every agent gets audit logging, cost tracking, circuit breaking, and dead letter capture for free. Add domain-specific hooks by implementing the `HookProvider` interface.
+
+---
+
+## Use Cases at Ameritas
+
+### Currently Implemented
+
+| Domain | Status | Description |
+|---|---|---|
+| **APS — Clinical** | Production-ready | Extract demographics, medical history, labs, medications, diagnoses from Attending Physician Statements |
+| **APS — Underwriting** | Production-ready | 47-question underwriting template with Y/N conditions, morbidity/mortality assessment, dated vitals, and page-referenced PDF reports |
+| **Workers' Comp** | Scaffold | Category definitions and models in place; questions and synthesis TBD |
+
+### Candidate Use Cases
+
+| Business Line | Document Type | Extraction Need |
+|---|---|---|
+| **Dental Claims** | EOBs, treatment plans, X-ray reports | Procedure codes, tooth numbers, pre-authorization status |
+| **Vision Claims** | Optical prescriptions, exam reports | Rx values, diagnosis codes, medical necessity |
+| **Disability** | Functional capacity evals, employer statements | Restrictions, work capacity, duration estimates |
+| **Retirement Services** | Beneficiary forms, hardship applications | Eligibility verification, compliance checks |
+| **Compliance** | Regulatory filings, audit responses | Policy adherence, gap identification |
+| **Group Benefits** | Enrollment forms, census data | Member demographics, plan elections, dependent verification |
+
+Each of these follows the same pattern: define questions, describe categories, write synthesis logic, design the output template. The RAG infrastructure, LLM orchestration, observability, and deployment are already solved.
+
+---
+
+## Getting Started (New Domain)
+
+### Step 1: Fork the Seed
 
 ```bash
-pip install -e .
-
-# With tiktoken tokenizer support:
-pip install -e ".[tiktoken]"
-
-# Development dependencies:
+git clone https://github.com/ksinha49/aps.git my-domain-project
+cd my-domain-project
 pip install -e ".[dev]"
+pytest tests/ -v  # Verify 390+ tests pass
 ```
 
-Requires Python 3.10+.
+### Step 2: Create Your Domain Package
 
-## Quick Start
-
-### 1. Build a tree index
-
-```bash
-scout-ai index pages.json \
-  --doc-id aps-001 \
-  --doc-name "John Doe APS" \
-  --base-url http://localhost:4000/v1 \
-  --api-key your-key \
-  --model qwen3-14b \
-  --output index.json
+```
+src/scout_ai/domains/my_domain/
+├── __init__.py
+├── __domain__.py          # Domain manifest (see example above)
+├── categories.py          # Category descriptions for retrieval
+├── models.py              # Domain-specific data models
+├── questions/
+│   └── template.json      # Your extraction questions
+├── synthesis/
+│   └── pipeline.py        # Deterministic post-processing
+└── formatters/
+    ├── pdf_formatter.py   # PDF template (extends base PDFFormatter)
+    └── pdf_styles.py      # Colors, display names, layout constants
 ```
 
-Where `pages.json` is a JSON array of `{"page_number": int, "text": str}` objects.
+### Step 3: Define Your Questions
 
-### 2. Search the index
-
-```bash
-scout-ai retrieve index.json "blood pressure readings" \
-  --base-url http://localhost:4000/v1 \
-  --api-key your-key \
-  --model qwen3-14b
-```
-
-### 3. Extract answers
-
-```bash
-scout-ai extract index.json questions.json \
-  --base-url http://localhost:4000/v1 \
-  --api-key your-key \
-  --model qwen3-14b \
-  --output results.json
-```
-
-Where `questions.json` is a JSON array of:
 ```json
 [
   {
-    "question_id": "demo-001",
-    "category": "demographics",
+    "question_id": "my-001",
+    "category": "patient_info",
     "question_text": "What is the patient's full name?",
     "tier": 1,
     "expected_type": "text"
+  },
+  {
+    "question_id": "my-002",
+    "category": "diagnosis",
+    "question_text": "Does the patient have a confirmed diagnosis of X?",
+    "tier": 2,
+    "expected_type": "boolean_with_detail"
   }
 ]
 ```
 
-## Python API
+### Step 4: Write Category Descriptions
 
 ```python
-import asyncio
-from scout_ai import (
-    PageIndexSettings,
-    PageContent,
-    LLMClient,
-    PageIndexIndexer,
-    PageIndexRetrieval,
-    PageIndexChat,
-    ExtractionService,
-    IngestionService,
-    IndexStore,
-    ExtractionQuestion,
-)
-
-settings = PageIndexSettings(
-    llm_base_url="http://localhost:4000/v1",
-    llm_api_key="your-key",
-    llm_model="qwen3-14b",
-)
-
-client = LLMClient(settings)
-indexer = PageIndexIndexer(settings, client)
-retrieval = PageIndexRetrieval(settings, client)
-chat = PageIndexChat(settings, client)
-
-# Build index from pre-OCR'd pages
-pages = [
-    PageContent(page_number=1, text="FACE SHEET\nPatient Name: John Doe..."),
-    PageContent(page_number=2, text="HISTORY AND PHYSICAL\n..."),
-]
-
-async def run():
-    index = await indexer.build_index(pages, "doc-001", "John Doe APS")
-
-    # Single query retrieval
-    result = await retrieval.retrieve(index, "What medications is the patient taking?")
-    print(result.source_pages, result.reasoning)
-
-    # Batch extraction
-    questions = [
-        ExtractionQuestion(
-            question_id="med-001",
-            category="current_medications",
-            question_text="List all current medications with dosages",
-            tier=1,
-            expected_type="list",
-        ),
-    ]
-    service = ExtractionService(retrieval, chat)
-    results = await service.extract(index, questions)
-    for batch in results:
-        for ext in batch.extractions:
-            print(f"{ext.question_id}: {ext.answer} (confidence: {ext.confidence})")
-
-asyncio.run(run())
+# categories.py
+CATEGORY_DESCRIPTIONS = {
+    "patient_info": "Patient demographics, identifiers, and contact information...",
+    "diagnosis": "Clinical diagnoses, ICD codes, onset dates, and severity...",
+}
 ```
+
+### Step 5: Run It
+
+```bash
+# Build index from your documents
+scout-ai index pages.json --doc-id doc-001 --output index.json
+
+# Extract answers
+scout-ai extract index.json questions.json --output results.json
+```
+
+---
+
+## Data Flow
+
+```mermaid
+flowchart TD
+    A["Pre-OCR'd Pages (PageContent[])"] --> B[IndexingAgent]
+
+    subgraph Indexing["Indexing (3-mode cascade)"]
+        B --> B1["Heuristic — regex section detection"]
+        B1 -->|No TOC| B2["Mode 1 — Minimal LLM"]
+        B2 -->|Fail| B3["Mode 2 — Guided LLM"]
+        B3 -->|Fail| B4["Mode 3 — Full LLM"]
+    end
+
+    B1 --> C["DocumentIndex (hierarchical tree)"]
+    B2 --> C
+    B3 --> C
+    B4 --> C
+
+    D["Questions (JSON template)"] --> E[ExtractionPipeline]
+    C --> E
+
+    subgraph Extraction["Tiered Extraction"]
+        E --> E1["Tier 1 — Batch (20 per prompt)"]
+        E --> E2["Tier 2/3 — Individual reasoning"]
+    end
+
+    E1 --> F["BatchExtractionResult[]"]
+    E2 --> F
+
+    F --> G[SynthesisPipeline]
+    subgraph Synthesis["Domain-Specific Synthesis"]
+        G --> G1["Clinical APS Summary"]
+        G --> G2["Underwriting Summary"]
+        G --> G3["Your Domain Summary"]
+    end
+
+    G1 --> H[PDFFormatter]
+    G2 --> H
+    G3 --> H
+    H --> I["PDF Report with citations"]
+```
+
+---
 
 ## Configuration
 
-All settings are configurable via environment variables with the `PAGEINDEX_` prefix:
+All settings use pydantic-settings with environment variable prefixes. No config files to manage.
 
-| Variable | Default | Description |
+| Prefix | Purpose | Example |
 |---|---|---|
-| `PAGEINDEX_LLM_BASE_URL` | `http://localhost:4000/v1` | LLM API endpoint |
-| `PAGEINDEX_LLM_API_KEY` | `no-key-required` | API key |
-| `PAGEINDEX_LLM_MODEL` | `qwen3-14b` | Model name |
-| `PAGEINDEX_LLM_TEMPERATURE` | `0.0` | Sampling temperature |
-| `PAGEINDEX_LLM_TIMEOUT` | `120` | Request timeout (seconds) |
-| `PAGEINDEX_TOC_CHECK_PAGE_COUNT` | `3` | Pages to scan for table of contents |
-| `PAGEINDEX_MAX_PAGES_PER_NODE` | `4` | Max pages per tree node |
-| `PAGEINDEX_MAX_TOKENS_PER_NODE` | `2000` | Max tokens per tree node |
-| `PAGEINDEX_ENABLE_MEDICAL_CLASSIFICATION` | `true` | Enable APS section detection |
-| `PAGEINDEX_RETRIEVAL_TOP_K_NODES` | `5` | Default nodes to retrieve |
-| `PAGEINDEX_TOKENIZER_METHOD` | `approximate` | Token counting: `approximate`, `tiktoken`, or `transformers` |
+| `SCOUT_LLM_` | LLM provider, model, temperature | `SCOUT_LLM_PROVIDER=bedrock` |
+| `SCOUT_INDEXING_` | TOC detection, node limits | `SCOUT_INDEXING_MAX_PAGES_PER_NODE=4` |
+| `SCOUT_EXTRACTION_` | Batch size, context limits | `SCOUT_EXTRACTION_BATCH_SIZE=20` |
+| `SCOUT_PERSISTENCE_` | Backend type, S3 bucket | `SCOUT_PERSISTENCE_BACKEND=s3` |
+| `SCOUT_OBSERVABILITY_` | Tracing, log level | `SCOUT_OBSERVABILITY_OTLP_ENDPOINT=...` |
+| `SCOUT_PDF_` | Page size, fonts, watermark | `SCOUT_PDF_PAGE_SIZE=letter` |
 
-## Architecture
+---
 
-```
-src/scout_ai/
-  config.py                           # Pydantic Settings (env-driven)
-  models.py                           # All Pydantic data models
-  exceptions.py                       # Exception hierarchy
-  interfaces/                         # Abstract base classes
-    ingestion.py                      #   IIngestionProvider
-    retrieval.py                      #   IRetrievalProvider
-    chat.py                           #   IChatProvider
-  providers/pageindex/                # Internalized PageIndex implementation
-    client.py                         #   AsyncOpenAI LLM client
-    tokenizer.py                      #   Pluggable token counter
-    indexer.py                        #   Tree index builder (3 modes)
-    medical_classifier.py             #   APS section detection (regex + LLM)
-    tree_builder.py                   #   Flat-list to tree conversion
-    tree_utils.py                     #   Node traversal, mapping, serialization
-    retrieval.py                      #   Single-query tree search
-    batch_retrieval.py                #   Category-batched multi-question retrieval
-    chat.py                           #   Tiered extraction completions
-  services/
-    ingestion_service.py              #   Index + persist
-    extraction_service.py             #   Retrieve + extract pipeline
-    index_store.py                    #   JSON file persistence
-  aps/                                # APS medical domain
-    categories.py                     #   16 extraction categories
-    section_patterns.py               #   Medical section regex patterns
-    prompts.py                        #   APS-specific prompt templates
-  cli/
-    main.py                           #   index / retrieve / extract commands
-```
-
-### Indexing Modes
-
-The indexer supports three modes (matching vanilla PageIndex behavior):
-
-1. **Mode 1 — TOC with page numbers**: Heuristic section detection finds boundaries via regex, then parses page ranges directly
-2. **Mode 2 — TOC without page numbers**: Sections detected but no page numbers; LLM maps sections to pages
-3. **Mode 3 — No TOC**: LLM generates document structure from content chunks
-
-Medical heuristic pre-pass runs before any LLM-based detection, saving 10-30 LLM calls for typical APS documents.
-
-## Testing
+## Build & Development
 
 ```bash
-# Unit tests (no LLM required)
-pytest tests/unit/ -v
+# Install (editable, with all extras)
+pip install -e ".[dev,api,otel,s3,pdf]"
 
-# Integration tests (mocked LLM via respx)
-pytest tests/integration/ -v
-
-# All tests
+# Run all tests (no LLM required — mocked via respx)
 pytest tests/ -v
+
+# Lint + type check
+ruff check src/ tests/
+mypy src/
+
+# Run API server
+uvicorn scout_ai.api.app:app --host 0.0.0.0 --port 8080
+
+# Generate underwriting demo PDF
+python3 /tmp/run_underwriting_demo.py
 ```
+
+Python 3.10+ required.
+
+---
+
+## Deployment
+
+| Target | Config | Notes |
+|---|---|---|
+| **AWS ECS (Fargate)** | `deploy/ecs/` | Task definition + service config |
+| **AWS EKS** | `deploy/eks/` | Deployment, service, configmap, HPA |
+| **RHEL On-Premise** | `deploy/rhel/` | systemd unit, install script, logrotate |
+| **Docker** | `docker/` | Production (RHEL UBI 9) + dev compose |
+
+---
+
+## Repository Structure
+
+```
+├── src/scout_ai/           # Core library
+│   ├── agents/             # Strands agent factories
+│   ├── skills/             # @tool-decorated agent skills
+│   ├── hooks/              # Observability & resilience hooks
+│   ├── domains/            # Domain modules (auto-discovered)
+│   │   ├── aps/            # APS domain (production-ready)
+│   │   └── workers_comp/   # Workers' comp (scaffold)
+│   ├── persistence/        # Storage backends (Protocol-based)
+│   ├── providers/          # Legacy provider implementations
+│   ├── prompts/            # Prompt registry + templates
+│   ├── api/                # FastAPI HTTP layer
+│   └── cli/                # Typer CLI
+├── tests/
+│   ├── unit/               # 300+ unit tests
+│   ├── integration/        # Mocked LLM integration tests
+│   └── fakes/              # FakeStrandsModel, FakePersistenceBackend
+├── deploy/                 # ECS, EKS, RHEL deployment configs
+├── docker/                 # Production + dev Dockerfiles
+├── PROJECT.md              # Detailed architecture documentation
+└── CLAUDE.md               # AI assistant guidance
+```
+
+---
 
 ## License
 
-MIT
+Internal — Ameritas Enterprise
