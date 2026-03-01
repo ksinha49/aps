@@ -35,7 +35,8 @@ class LLMConfig(BaseSettings):
     max_retries: int = 5
     retry_jitter_factor: float = 0.5
     retry_max_delay: float = 30.0
-    aws_region: str = "us-west-2"
+    aws_region: str = "us-east-2"
+    inference_backend: str = "realtime"
 
 
 class IndexingConfig(BaseSettings):
@@ -134,7 +135,7 @@ class PromptConfig(BaseSettings):
 
     backend: Literal["file", "dynamodb"] = "file"
     table_name: str = "scout-prompts"
-    aws_region: str = "us-east-1"
+    aws_region: str = "us-east-2"
     cache_ttl_seconds: float = 300.0
     cache_max_size: int = 500
     fallback_to_file: bool = True
@@ -221,7 +222,7 @@ class RulesConfig(BaseSettings):
     backend: Literal["file", "dynamodb", "memory"] = "file"
     rules_path: Path = Path("./rules/default_rules.yaml")
     table_name: str = "scout-rules"
-    aws_region: str = "us-east-1"
+    aws_region: str = "us-east-2"
     cache_ttl_seconds: float = 600.0
     cache_max_size: int = 200
     fail_on_error: bool = False

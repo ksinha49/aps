@@ -15,6 +15,7 @@ from typing import Any
 
 from scout_ai.config import ScoutSettings
 from scout_ai.exceptions import LLMClientError, NonRetryableError, RetryableError
+from scout_ai.inference.protocols import IInferenceBackend, InferenceRequest
 
 log = logging.getLogger(__name__)
 
@@ -22,12 +23,37 @@ log = logging.getLogger(__name__)
 class LLMClient:
     """Async LLM client using LiteLLM with optional Anthropic prompt caching."""
 
-    def __init__(self, settings: ScoutSettings) -> None:
+    def __init__(
+        self,
+        settings: ScoutSettings,
+        backend: IInferenceBackend | None = None,
+    ) -> None:
         self._settings = settings
+        self._backend = backend
 
     @property
     def model(self) -> str:
         return self._settings.llm_model
+
+    def _build_messages(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str | None = None,
+        cache_system: bool = False,
+        chat_history: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build the messages list from prompt components."""
+        messages: list[dict[str, Any]] = []
+        if system_prompt:
+            system_content: list[dict[str, Any]] = [{"type": "text", "text": system_prompt}]
+            if cache_system:
+                system_content[0]["cache_control"] = {"type": "ephemeral"}
+            messages.append({"role": "system", "content": system_content})
+        if chat_history:
+            messages.extend(chat_history)
+        messages.append({"role": "user", "content": prompt})
+        return messages
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
@@ -95,24 +121,24 @@ class LLMClient:
 
         ``finish_reason`` is ``"finished"`` or ``"max_output_reached"``.
         """
-        from litellm import acompletion
-
         effective_model = model or self._settings.llm_model
         effective_temp = temperature if temperature is not None else self._settings.llm_temperature
+        messages = self._build_messages(prompt, system_prompt=system_prompt, cache_system=cache_system, chat_history=chat_history)
 
-        messages: list[dict[str, Any]] = []
+        # Delegate to pluggable backend when available
+        if self._backend is not None:
+            params: dict[str, Any] = {
+                "temperature": effective_temp,
+                "top_p": self._settings.llm_top_p,
+                "timeout": self._settings.llm_timeout,
+            }
+            if self._settings.llm_seed is not None:
+                params["seed"] = self._settings.llm_seed
+            result = await self._backend.infer(messages, effective_model, **params)
+            return result.content, result.finish_reason
 
-        # System message with optional cache_control
-        if system_prompt:
-            system_content: list[dict[str, Any]] = [{"type": "text", "text": system_prompt}]
-            if cache_system:
-                system_content[0]["cache_control"] = {"type": "ephemeral"}
-            messages.append({"role": "system", "content": system_content})
-
-        if chat_history:
-            messages.extend(chat_history)
-
-        messages.append({"role": "user", "content": prompt})
+        # Inline litellm path (backward compat when no backend injected)
+        from litellm import acompletion
 
         max_retries = self._settings.llm_max_retries
         jitter_factor = getattr(self._settings, "retry_jitter_factor", 0.5)
@@ -177,6 +203,25 @@ class LLMClient:
 
         Returns results in order; failed tasks return empty strings.
         """
+        # Delegate to backend.infer_batch when available
+        if self._backend is not None:
+            requests = [
+                InferenceRequest(
+                    request_id=str(i),
+                    messages=self._build_messages(p, system_prompt=system_prompt, cache_system=cache_system),
+                    model=self._settings.llm_model,
+                    params={
+                        "temperature": self._settings.llm_temperature,
+                        "top_p": self._settings.llm_top_p,
+                        "timeout": self._settings.llm_timeout,
+                        **({"seed": self._settings.llm_seed} if self._settings.llm_seed is not None else {}),
+                    },
+                )
+                for i, p in enumerate(prompts)
+            ]
+            results = await self._backend.infer_batch(requests)
+            return [r.content for r in results]
+
         sem = asyncio.Semaphore(max_concurrent or self._settings.retrieval_max_concurrent)
 
         async def _bounded(prompt: str) -> str:

@@ -228,6 +228,7 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
     injected from the domain registry into the providers.
     """
     from scout_ai.config import ScoutSettings
+    from scout_ai.inference import create_inference_backend
     from scout_ai.providers.pageindex.chat import ScoutChat
     from scout_ai.providers.pageindex.client import LLMClient
     from scout_ai.providers.pageindex.retrieval import ScoutRetrieval
@@ -257,7 +258,8 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
     except (KeyError, ImportError):
         pass
 
-    client = LLMClient(legacy_settings)
+    backend = create_inference_backend(settings)
+    client = LLMClient(legacy_settings, backend=backend)
     retrieval = ScoutRetrieval(
         legacy_settings,
         client,
