@@ -14,6 +14,11 @@ mkdir -p "${INSTALL_DIR}"
 mkdir -p /var/log/scout-ai
 mkdir -p /data/indexes
 
+# Create env file with secure permissions BEFORE setting ownership
+touch "${INSTALL_DIR}/.env"
+chmod 600 "${INSTALL_DIR}/.env"
+echo "# Configure SCOUT_* environment variables here" > "${INSTALL_DIR}/.env"
+
 # Create virtualenv and install
 python3 -m venv "${INSTALL_DIR}/venv"
 "${INSTALL_DIR}/venv/bin/pip" install --upgrade pip

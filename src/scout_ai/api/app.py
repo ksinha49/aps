@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI
 from scout_ai.api.auth import require_auth
 from scout_ai.api.routes import extract, health, index, retrieve
 from scout_ai.core.config import AppSettings
+from scout_ai.core.startup_checks import validate_settings
 from scout_ai.hooks import setup_logging, setup_tracing
 from scout_ai.prompts import configure as configure_prompts
 
@@ -18,6 +19,7 @@ from scout_ai.prompts import configure as configure_prompts
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup/shutdown lifecycle."""
     settings = AppSettings()
+    validate_settings(settings)
     setup_logging(settings.observability)
     setup_tracing(settings.observability)
 
