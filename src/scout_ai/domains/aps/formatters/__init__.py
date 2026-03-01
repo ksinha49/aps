@@ -1,22 +1,14 @@
-"""Output formatters for rendering summaries to various formats.
-
-Re-exports APS formatters for backward compatibility::
-
-    from scout_ai.formatters import PDFFormatter, JSONFormatter
-"""
+"""APS output formatters: PDF, JSON rendering for APSSummary / UnderwriterSummary."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from scout_ai.domains.aps.formatters.json_formatter import JSONFormatter
-from scout_ai.formatters.protocols import IOutputFormatter, SummaryInput
 
 __all__ = [
-    "IOutputFormatter",
     "JSONFormatter",
     "PDFFormatter",
-    "SummaryInput",
 ]
 
 

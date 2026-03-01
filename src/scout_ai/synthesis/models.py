@@ -1,29 +1,49 @@
-"""Data models for the synthesis pipeline."""
+"""Re-export shim — canonical location is ``scout_ai.domains.aps.models``.
+
+All APS synthesis dataclasses have moved to ``domains.aps.models``.
+This module re-exports them for backward compatibility::
+
+    from scout_ai.synthesis.models import APSSummary  # still works
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from scout_ai.domains.aps.models import (
+    Allergy,
+    APSSection,
+    APSSummary,
+    CitationRef,
+    Condition,
+    Encounter,
+    Finding,
+    ImagingResult,
+    LabResult,
+    Medication,
+    PatientDemographics,
+    RedFlag,
+    RiskClassification,
+    SurgicalHistory,
+    SynthesisSection,
+    UnderwriterSummary,
+    VitalSign,
+)
 
-
-@dataclass
-class SynthesisSection:
-    """A single section of the underwriter summary."""
-
-    title: str
-    content: str
-    source_categories: list[str] = field(default_factory=list)
-    key_findings: list[str] = field(default_factory=list)
-
-
-@dataclass
-class UnderwriterSummary:
-    """Structured underwriter summary produced from extraction results."""
-
-    document_id: str
-    patient_demographics: str
-    sections: list[SynthesisSection] = field(default_factory=list)
-    risk_factors: list[str] = field(default_factory=list)
-    overall_assessment: str = ""
-    total_questions_answered: int = 0
-    high_confidence_count: int = 0
-    generated_at: str = ""
+__all__ = [
+    "Allergy",
+    "APSSection",
+    "APSSummary",
+    "CitationRef",
+    "Condition",
+    "Encounter",
+    "Finding",
+    "ImagingResult",
+    "LabResult",
+    "Medication",
+    "PatientDemographics",
+    "RedFlag",
+    "RiskClassification",
+    "SurgicalHistory",
+    "SynthesisSection",
+    "UnderwriterSummary",
+    "VitalSign",
+]

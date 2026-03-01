@@ -1,5 +1,9 @@
 """Validation module: rules engine, backends, and check modules.
 
+Generic models (``Rule``, ``ValidationIssue``, ``ValidationReport``) and
+backends (``file``, ``dynamodb``, ``memory``) remain here.
+APS-specific logic (engine, checks) lives in ``domains.aps.validation``.
+
 Factory function::
 
     from scout_ai.validation import create_rules_engine
@@ -23,42 +27,17 @@ from scout_ai.validation.models import (
 
 if TYPE_CHECKING:
     from scout_ai.core.config import AppSettings
-    from scout_ai.validation.engine import RulesEngine
+    from scout_ai.domains.aps.validation.engine import RulesEngine
 
 
 def create_rules_engine(settings: AppSettings) -> RulesEngine | None:
-    """Create a RulesEngine from application settings, or None if disabled."""
-    from scout_ai.validation.engine import RulesEngine
+    """Create a RulesEngine from application settings, or None if disabled.
 
-    if not settings.rules.enabled:
-        return None
+    Re-export shim — delegates to ``domains.aps.validation.create_rules_engine``.
+    """
+    from scout_ai.domains.aps.validation import create_rules_engine as _create
 
-    backend_type = settings.rules.backend
-
-    if backend_type == "file":
-        from scout_ai.validation.backends.file_backend import FileRulesBackend
-
-        backend = FileRulesBackend(settings.rules.rules_path)
-
-    elif backend_type == "dynamodb":
-        from scout_ai.validation.backends.dynamodb_backend import DynamoDBRulesBackend
-
-        backend = DynamoDBRulesBackend(
-            table_name=settings.rules.table_name,
-            aws_region=settings.rules.aws_region,
-            cache_ttl_seconds=settings.rules.cache_ttl_seconds,
-            cache_max_size=settings.rules.cache_max_size,
-        )
-
-    elif backend_type == "memory":
-        from scout_ai.validation.backends.memory_backend import MemoryRulesBackend
-
-        backend = MemoryRulesBackend()
-
-    else:
-        raise ValueError(f"Unknown rules backend: {backend_type!r}")
-
-    return RulesEngine(backend)
+    return _create(settings)
 
 
 __all__ = [

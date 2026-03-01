@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scout_ai.models import ExtractionCategory
+from scout_ai.domains.aps.models import ExtractionCategory
 
 CATEGORY_DESCRIPTIONS: dict[ExtractionCategory, str] = {
     ExtractionCategory.DEMOGRAPHICS: (

@@ -1,7 +1,7 @@
 """Batch retrieval skill — category-grouped multi-question retrieval.
 
 Replaces ``providers/pageindex/batch_retrieval.py``. Groups questions by
-ExtractionCategory and runs one synthesized search per category.
+category and runs one synthesized search per category.
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from typing import Any
 from strands import tool
 from strands.types.tools import ToolContext
 
-from scout_ai.aps.categories import CATEGORY_DESCRIPTIONS
+from scout_ai.domains.aps.categories import CATEGORY_DESCRIPTIONS
+from scout_ai.domains.aps.models import ExtractionCategory
 from scout_ai.models import (
     DocumentIndex,
-    ExtractionCategory,
     ExtractionQuestion,
     RetrievalResult,
 )
@@ -52,10 +52,13 @@ def batch_retrieve(  # type: ignore[assignment]
     if not questions:
         return json.dumps({"error": "No questions in invocation state"})
 
-    # Group by category
-    by_category: dict[ExtractionCategory, list[ExtractionQuestion]] = defaultdict(list)
+    # Group by category (str-based)
+    by_category: dict[str, list[ExtractionQuestion]] = defaultdict(list)
     for q in questions:
-        by_category[q.category].append(q)
+        cat_key = q.category
+        if hasattr(cat_key, "value"):
+            cat_key = cat_key.value
+        by_category[cat_key].append(q)
 
     tree_structure = json.dumps(tree_to_dict(index.tree), indent=2)
 
@@ -64,11 +67,17 @@ def batch_retrieve(  # type: ignore[assignment]
     if settings:
         top_k = settings.retrieval.top_k_nodes
 
+    # Resolve category descriptions — supports both enum keys and str keys
     category_tasks = []
-    for category, cat_questions in by_category.items():
-        category_desc = CATEGORY_DESCRIPTIONS.get(category, category.value)
+    for cat_str, cat_questions in by_category.items():
+        category_desc = cat_str
+        try:
+            cat_enum = ExtractionCategory(cat_str)
+            category_desc = CATEGORY_DESCRIPTIONS.get(cat_enum, cat_str)
+        except ValueError:
+            pass
         category_tasks.append({
-            "category": category.value,
+            "category": cat_str,
             "category_description": category_desc,
             "question_count": len(cat_questions),
             "question_ids": [q.question_id for q in cat_questions],
@@ -93,7 +102,7 @@ def resolve_batch_results(
     index: DocumentIndex,
     category_results: dict[str, dict[str, Any]],
     top_k: int = 5,
-) -> dict[ExtractionCategory, RetrievalResult]:
+) -> dict[str, RetrievalResult]:
     """Pure logic: resolve category-level results to RetrievalResults.
 
     Args:
@@ -103,18 +112,12 @@ def resolve_batch_results(
         top_k: Maximum nodes per category.
 
     Returns:
-        Dict mapping ExtractionCategory to RetrievalResult.
+        Dict mapping category string to RetrievalResult.
     """
     node_map = create_node_mapping(index.tree)
-    results: dict[ExtractionCategory, RetrievalResult] = {}
+    results: dict[str, RetrievalResult] = {}
 
     for cat_str, result_data in category_results.items():
-        try:
-            category = ExtractionCategory(cat_str)
-        except ValueError:
-            log.warning(f"Unknown category: {cat_str}")
-            continue
-
         node_ids = result_data.get("node_ids", [])
         reasoning = result_data.get("reasoning", "")
 
@@ -134,10 +137,17 @@ def resolve_batch_results(
                 })
 
         source_pages = get_source_pages(matched_nodes) if matched_nodes else []
-        category_desc = CATEGORY_DESCRIPTIONS.get(category, category.value)
 
-        results[category] = RetrievalResult(
-            query=f"[{category.value}] {category_desc}",
+        # Try to get a description from APS categories
+        category_desc = cat_str
+        try:
+            cat_enum = ExtractionCategory(cat_str)
+            category_desc = CATEGORY_DESCRIPTIONS.get(cat_enum, cat_str)
+        except ValueError:
+            pass
+
+        results[cat_str] = RetrievalResult(
+            query=f"[{cat_str}] {category_desc}",
             retrieved_nodes=retrieved_nodes,
             source_pages=source_pages,
             reasoning=reasoning,

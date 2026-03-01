@@ -113,7 +113,7 @@ async def extract(request: ExtractRequest, req: Request) -> ExtractResponse:
     settings = req.app.state.settings
     apply_prompt_context(request.prompt_context, settings.prompt)
 
-    from scout_ai.models import ExtractionCategory, ExtractionQuestion
+    from scout_ai.models import ExtractionQuestion
     from scout_ai.services.extraction_service import ExtractionService
     from scout_ai.services.index_store import IndexStore
 
@@ -123,7 +123,7 @@ async def extract(request: ExtractRequest, req: Request) -> ExtractResponse:
     questions = [
         ExtractionQuestion(
             question_id=q.question_id,
-            category=ExtractionCategory(q.category),
+            category=q.category,
             question_text=q.question_text,
             tier=q.tier,
         )

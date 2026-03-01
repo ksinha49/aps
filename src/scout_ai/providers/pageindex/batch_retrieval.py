@@ -15,9 +15,9 @@ from typing import Any
 from scout_ai.aps.categories import CATEGORY_DESCRIPTIONS
 from scout_ai.aps.prompts import CATEGORY_SEARCH_PROMPT
 from scout_ai.config import ScoutSettings
+from scout_ai.domains.aps.models import ExtractionCategory
 from scout_ai.models import (
     DocumentIndex,
-    ExtractionCategory,
     ExtractionQuestion,
     RetrievalResult,
 )
@@ -49,15 +49,18 @@ class BatchRetrieval:
         self,
         index: DocumentIndex,
         questions: list[ExtractionQuestion],
-    ) -> dict[ExtractionCategory, RetrievalResult]:
+    ) -> dict[str, RetrievalResult]:
         """Group questions by category and run one search per category.
 
-        Returns a dict mapping each category to its retrieval result.
+        Returns a dict mapping each category string to its retrieval result.
         """
-        # Group questions by category
-        by_category: dict[ExtractionCategory, list[ExtractionQuestion]] = defaultdict(list)
+        # Group questions by category (str-keyed)
+        by_category: dict[str, list[ExtractionQuestion]] = defaultdict(list)
         for q in questions:
-            by_category[q.category].append(q)
+            cat_key = q.category
+            if hasattr(cat_key, "value"):
+                cat_key = cat_key.value
+            by_category[cat_key].append(q)
 
         log.info(
             f"Batch retrieval: {len(questions)} questions in {len(by_category)} categories"
@@ -65,15 +68,15 @@ class BatchRetrieval:
 
         # Run one search per category with concurrency control
         sem = asyncio.Semaphore(self._settings.retrieval_max_concurrent)
-        results: dict[ExtractionCategory, RetrievalResult] = {}
+        results: dict[str, RetrievalResult] = {}
 
         async def _search_category(
-            category: ExtractionCategory,
+            category_str: str,
             cat_questions: list[ExtractionQuestion],
-        ) -> tuple[ExtractionCategory, RetrievalResult]:
+        ) -> tuple[str, RetrievalResult]:
             async with sem:
-                result = await self._category_search(index, category, cat_questions)
-                return category, result
+                result = await self._category_search(index, category_str, cat_questions)
+                return category_str, result
 
         tasks = [
             _search_category(cat, qs) for cat, qs in by_category.items()
@@ -84,24 +87,30 @@ class BatchRetrieval:
             if isinstance(result, Exception):
                 log.warning(f"Category search failed: {result}")
                 continue
-            category, retrieval_result = result
-            results[category] = retrieval_result
+            category_str, retrieval_result = result
+            results[category_str] = retrieval_result
 
         return results
 
     async def _category_search(
         self,
         index: DocumentIndex,
-        category: ExtractionCategory,
+        category_str: str,
         questions: list[ExtractionQuestion],
     ) -> RetrievalResult:
         """Build a synthesized query for a category and search the tree."""
-        category_desc = CATEGORY_DESCRIPTIONS.get(category, category.value)
+        # Resolve description from APS categories if possible
+        category_desc = category_str
+        try:
+            cat_enum = ExtractionCategory(category_str)
+            category_desc = CATEGORY_DESCRIPTIONS.get(cat_enum, category_str)
+        except ValueError:
+            pass
 
         # Build a synthesized query from category description
         tree_structure = json.dumps(tree_to_dict(index.tree), indent=2)
         prompt = CATEGORY_SEARCH_PROMPT.format(
-            category=category.value,
+            category=category_str,
             category_description=category_desc,
             tree_structure=tree_structure,
             top_k=self._settings.retrieval_top_k_nodes,
@@ -132,7 +141,7 @@ class BatchRetrieval:
 
         source_pages = get_source_pages(matched_nodes) if matched_nodes else []
 
-        synthesized_query = f"[{category.value}] {category_desc}"
+        synthesized_query = f"[{category_str}] {category_desc}"
         return RetrievalResult(
             query=synthesized_query,
             retrieved_nodes=retrieved_nodes,

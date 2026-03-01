@@ -22,6 +22,8 @@ Strands-era API::
 
 from __future__ import annotations
 
+from typing import Any
+
 # ── Strands-era imports ───────────────────────────────────────────────
 from scout_ai.agents.extraction_agent import create_extraction_agent
 from scout_ai.agents.indexing_agent import create_indexing_agent
@@ -41,10 +43,8 @@ from scout_ai.models import (
     BatchExtractionResult,
     Citation,
     DocumentIndex,
-    ExtractionCategory,
     ExtractionQuestion,
     ExtractionResult,
-    MedicalSectionType,
     PageContent,
     RetrievalResult,
     TreeNode,
@@ -88,3 +88,21 @@ __all__ = [
     "CircuitBreakerHook",
     "DeadLetterHook",
 ]
+
+
+# Backward compat: ``from scout_ai import MedicalSectionType`` still works
+_COMPAT_NAMES = {"MedicalSectionType", "ExtractionCategory"}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _COMPAT_NAMES:
+        from scout_ai.domains.aps.models import (
+            ExtractionCategory as _EC,
+        )
+        from scout_ai.domains.aps.models import (
+            MedicalSectionType as _MST,
+        )
+
+        _map = {"MedicalSectionType": _MST, "ExtractionCategory": _EC}
+        return _map[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Pattern
 
-from scout_ai.models import MedicalSectionType
+from scout_ai.domains.aps.models import MedicalSectionType
 
 # Each pattern matches common section titles / headers in APS documents.
 # Patterns are case-insensitive and match at word boundaries.

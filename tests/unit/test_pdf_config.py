@@ -70,6 +70,59 @@ class TestPDFFormattingConfigEnvOverrides:
         assert cfg.confidential_watermark is False
 
 
+class TestPDFFormattingConfigNewFieldDefaults:
+    def test_include_toc_default(self) -> None:
+        cfg = PDFFormattingConfig()
+        assert cfg.include_toc is True
+
+    def test_include_citation_refs_default(self) -> None:
+        cfg = PDFFormattingConfig()
+        assert cfg.include_citation_refs is True
+
+    def test_section_numbering_default(self) -> None:
+        cfg = PDFFormattingConfig()
+        assert cfg.section_numbering is True
+
+    def test_lab_table_flag_colors_default(self) -> None:
+        cfg = PDFFormattingConfig()
+        assert cfg.lab_table_flag_colors is True
+
+    def test_risk_badge_enabled_default(self) -> None:
+        cfg = PDFFormattingConfig()
+        assert cfg.risk_badge_enabled is True
+
+    def test_red_flag_alerts_default(self) -> None:
+        cfg = PDFFormattingConfig()
+        assert cfg.red_flag_alerts is True
+
+
+class TestPDFFormattingConfigNewFieldEnvOverrides:
+    def test_include_toc_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("SCOUT_PDF_INCLUDE_TOC", "false")
+        cfg = PDFFormattingConfig()
+        assert cfg.include_toc is False
+
+    def test_include_citation_refs_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("SCOUT_PDF_INCLUDE_CITATION_REFS", "false")
+        cfg = PDFFormattingConfig()
+        assert cfg.include_citation_refs is False
+
+    def test_section_numbering_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("SCOUT_PDF_SECTION_NUMBERING", "false")
+        cfg = PDFFormattingConfig()
+        assert cfg.section_numbering is False
+
+    def test_risk_badge_enabled_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("SCOUT_PDF_RISK_BADGE_ENABLED", "false")
+        cfg = PDFFormattingConfig()
+        assert cfg.risk_badge_enabled is False
+
+    def test_red_flag_alerts_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("SCOUT_PDF_RED_FLAG_ALERTS", "false")
+        cfg = PDFFormattingConfig()
+        assert cfg.red_flag_alerts is False
+
+
 class TestPDFConfigInAppSettings:
     def test_app_settings_has_pdf(self) -> None:
         from scout_ai.core.config import AppSettings

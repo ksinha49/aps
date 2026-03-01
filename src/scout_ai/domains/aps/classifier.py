@@ -10,8 +10,9 @@ import logging
 import re
 from typing import Any, Optional
 
+from scout_ai.domains.aps.models import MedicalSectionType
 from scout_ai.domains.aps.section_patterns import SECTION_PATTERNS
-from scout_ai.models import MedicalSectionType, PageContent
+from scout_ai.models import PageContent
 from scout_ai.prompts.templates.aps.classification import CLASSIFY_SECTION_PROMPT
 
 log = logging.getLogger(__name__)

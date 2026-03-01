@@ -14,21 +14,20 @@ import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
+from scout_ai.domains.aps.models import UnderwriterSummary
 from scout_ai.models import (
     BatchExtractionResult,
     DocumentIndex,
-    ExtractionCategory,
     ExtractionQuestion,
     PageContent,
     RetrievalResult,
 )
-from scout_ai.synthesis.models import UnderwriterSummary
 
 if TYPE_CHECKING:
     from scout_ai.core.config import AppSettings
+    from scout_ai.domains.aps.validation.engine import RulesEngine
     from scout_ai.interfaces.chat import IChatProvider
     from scout_ai.interfaces.retrieval import IRetrievalProvider
-    from scout_ai.validation.engine import RulesEngine
     from scout_ai.validation.models import ValidationReport
 
 log = logging.getLogger(__name__)
@@ -73,33 +72,36 @@ class ExtractionPipeline:
         # Step 1: Category-batched retrieval
         retrieval_results = await self._retrieval.batch_retrieve(index, questions)
 
-        # Step 2: Extract answers per category
-        by_category: dict[ExtractionCategory, list[ExtractionQuestion]] = defaultdict(list)
+        # Step 2: Extract answers per category (str-keyed)
+        by_category: dict[str, list[ExtractionQuestion]] = defaultdict(list)
         for q in questions:
-            by_category[q.category].append(q)
+            cat_key = q.category
+            if hasattr(cat_key, "value"):
+                cat_key = cat_key.value
+            by_category[cat_key].append(q)
 
         results: list[BatchExtractionResult] = []
-        for category, cat_questions in by_category.items():
-            retrieval = retrieval_results.get(category)
+        for category_str, cat_questions in by_category.items():
+            retrieval = retrieval_results.get(category_str)
             if not retrieval or not retrieval.retrieved_nodes:
-                log.warning(f"No retrieval results for category {category.value}")
+                log.warning("No retrieval results for category %s", category_str)
                 results.append(
                     BatchExtractionResult(
-                        category=category,
-                        retrieval=retrieval or RetrievalResult(query=category.value),
+                        category=category_str,
+                        retrieval=retrieval or RetrievalResult(query=category_str),
                     )
                 )
                 continue
 
             context = build_cited_context(retrieval.retrieved_nodes, page_map)
             if not context:
-                results.append(BatchExtractionResult(category=category, retrieval=retrieval))
+                results.append(BatchExtractionResult(category=category_str, retrieval=retrieval))
                 continue
 
             extractions = await self._chat.extract_answers(cat_questions, context)
             results.append(
                 BatchExtractionResult(
-                    category=category,
+                    category=category_str,
                     retrieval=retrieval,
                     extractions=extractions,
                 )
@@ -136,7 +138,7 @@ class ExtractionPipeline:
         summary: UnderwriterSummary | None = None
         validation_report: ValidationReport | None = None
         if synthesize:
-            from scout_ai.synthesis.pipeline import SynthesisPipeline
+            from scout_ai.domains.aps.synthesis.pipeline import SynthesisPipeline
 
             # Determine cache_enabled from chat provider if available
             cache_enabled = getattr(self._chat, "_cache_enabled", False)
@@ -173,20 +175,20 @@ def build_cited_context(
             ctype = ctype.value
         start = node["start_index"]
         end = node["end_index"]
-        header = f"[Section: {title} | Type: {ctype} | Pages {start}-{end}]"
+        header = "[Section: %s | Type: %s | Pages %d-%d]" % (title, ctype, start, end)
 
         if page_map and start != end:
             page_parts: list[str] = []
             for pg in range(start, end + 1):
                 pg_text = page_map.get(pg)
                 if pg_text:
-                    page_parts.append(f"[Page {pg}]\n{pg_text}")
+                    page_parts.append("[Page %d]\n%s" % (pg, pg_text))
             if page_parts:
-                parts.append(f"{header}\n" + "\n\n".join(page_parts))
+                parts.append("%s\n%s" % (header, "\n\n".join(page_parts)))
             else:
-                parts.append(f"{header}\n[Page {start}]\n{text}")
+                parts.append("%s\n[Page %d]\n%s" % (header, start, text))
         else:
-            parts.append(f"{header}\n[Page {start}]\n{text}")
+            parts.append("%s\n[Page %d]\n%s" % (header, start, text))
 
     return "\n\n".join(parts)
 

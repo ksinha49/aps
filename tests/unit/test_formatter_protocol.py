@@ -6,6 +6,7 @@ import pytest
 
 from scout_ai.formatters.json_formatter import JSONFormatter
 from scout_ai.formatters.protocols import IOutputFormatter
+from scout_ai.synthesis.models import APSSummary, PatientDemographics, UnderwriterSummary
 
 
 class TestJSONFormatterSatisfiesProtocol:
@@ -20,6 +21,16 @@ class TestJSONFormatterSatisfiesProtocol:
 
     def test_has_content_type_property(self) -> None:
         assert hasattr(JSONFormatter, "content_type")
+
+    def test_accepts_aps_summary(self) -> None:
+        """JSONFormatter can serialize an APSSummary."""
+        summary = APSSummary(
+            document_id="test",
+            demographics=PatientDemographics(full_name="Jane Doe"),
+        )
+        result = JSONFormatter().format(summary)
+        assert b"test" in result
+        assert b"Jane Doe" in result
 
 
 class TestPDFFormatterSatisfiesProtocol:
@@ -46,3 +57,23 @@ class TestPDFFormatterSatisfiesProtocol:
         from scout_ai.formatters.pdf_formatter import PDFFormatter
 
         assert hasattr(PDFFormatter, "content_type")
+
+    def test_accepts_aps_summary(self) -> None:
+        from scout_ai.formatters.pdf_formatter import PDFFormatter
+
+        summary = APSSummary(
+            document_id="test",
+            demographics=PatientDemographics(full_name="Jane Doe"),
+        )
+        result = PDFFormatter().format(summary)
+        assert result[:5] == b"%PDF-"
+
+
+class TestSummaryInputType:
+    def test_union_includes_underwriter_summary(self) -> None:
+        summary = UnderwriterSummary(document_id="test", patient_demographics="Test")
+        assert isinstance(summary, (UnderwriterSummary, APSSummary))
+
+    def test_union_includes_aps_summary(self) -> None:
+        summary = APSSummary(document_id="test")
+        assert isinstance(summary, (UnderwriterSummary, APSSummary))

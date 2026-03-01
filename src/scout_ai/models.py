@@ -1,35 +1,17 @@
-"""Pydantic data models for scout-ai."""
+"""Pydantic data models for scout-ai.
+
+Core models are domain-agnostic.  Domain-specific enums and dataclasses
+(e.g. ``MedicalSectionType``, ``ExtractionCategory``) live in their
+respective ``domains.*`` sub-packages.  Backward-compatible re-exports
+are preserved via ``__getattr__``.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
-
-# ── Medical section types ────────────────────────────────────────────
-
-
-class MedicalSectionType(str, Enum):
-    """Recognized APS medical document section types."""
-
-    FACE_SHEET = "face_sheet"
-    PROGRESS_NOTE = "progress_note"
-    LAB_REPORT = "lab_report"
-    IMAGING = "imaging"
-    PATHOLOGY = "pathology"
-    OPERATIVE_REPORT = "operative_report"
-    DISCHARGE_SUMMARY = "discharge_summary"
-    CONSULTATION = "consultation"
-    MEDICATION_LIST = "medication_list"
-    VITAL_SIGNS = "vital_signs"
-    NURSING_NOTE = "nursing_note"
-    THERAPY_NOTE = "therapy_note"
-    MENTAL_HEALTH = "mental_health"
-    DENTAL = "dental"
-    UNKNOWN = "unknown"
-
 
 # ── Document / page models ───────────────────────────────────────────
 
@@ -51,7 +33,7 @@ class TreeNode(BaseModel):
     end_index: int
     text: str = ""
     summary: str = ""
-    content_type: MedicalSectionType = MedicalSectionType.UNKNOWN
+    content_type: str = "unknown"
     children: list[TreeNode] = Field(default_factory=list)
 
     # Metadata carried during construction (not persisted in final output)
@@ -71,30 +53,6 @@ class DocumentIndex(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-# ── Extraction categories ────────────────────────────────────────────
-
-
-class ExtractionCategory(str, Enum):
-    """16 APS extraction categories matching the schema sections."""
-
-    DEMOGRAPHICS = "demographics"
-    EMPLOYMENT = "employment"
-    MEDICAL_HISTORY = "medical_history"
-    CURRENT_MEDICATIONS = "current_medications"
-    ALLERGIES = "allergies"
-    VITAL_SIGNS = "vital_signs"
-    PHYSICAL_EXAM = "physical_exam"
-    LAB_RESULTS = "lab_results"
-    IMAGING_RESULTS = "imaging_results"
-    DIAGNOSES = "diagnoses"
-    PROCEDURES = "procedures"
-    MENTAL_HEALTH = "mental_health"
-    FUNCTIONAL_CAPACITY = "functional_capacity"
-    TREATMENT_PLAN = "treatment_plan"
-    PROGNOSIS = "prognosis"
-    PHYSICIAN_OPINION = "physician_opinion"
-
-
 # ── Extraction question / result models ──────────────────────────────
 
 
@@ -102,7 +60,7 @@ class ExtractionQuestion(BaseModel):
     """A single extraction question with tier assignment."""
 
     question_id: str
-    category: ExtractionCategory
+    category: str
     question_text: str
     tier: int = Field(default=1, ge=1, le=3)
     expected_type: str = "text"
@@ -141,6 +99,26 @@ class ExtractionResult(BaseModel):
 class BatchExtractionResult(BaseModel):
     """Results for an entire extraction category."""
 
-    category: ExtractionCategory
+    category: str
     retrieval: RetrievalResult
     extractions: list[ExtractionResult] = Field(default_factory=list)
+
+
+# ── Backward compatibility shim ──────────────────────────────────────
+# ``from scout_ai.models import MedicalSectionType`` still works.
+
+_COMPAT_NAMES = {"MedicalSectionType", "ExtractionCategory"}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _COMPAT_NAMES:
+        from scout_ai.domains.aps.models import (
+            ExtractionCategory as _EC,
+        )
+        from scout_ai.domains.aps.models import (
+            MedicalSectionType as _MST,
+        )
+
+        _map = {"MedicalSectionType": _MST, "ExtractionCategory": _EC}
+        return _map[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

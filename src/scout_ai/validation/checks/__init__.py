@@ -1,1 +1,1 @@
-"""Validation check modules — pure functions, no LLM calls."""
+"""Validation check modules — re-exports from ``domains.aps.validation.checks``."""

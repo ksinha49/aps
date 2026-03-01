@@ -123,8 +123,9 @@ def tree_to_dict(nodes: list[TreeNode], include_text: bool = False) -> list[dict
         }
         if node.summary:
             d["summary"] = node.summary
-        if node.content_type.value != "unknown":
-            d["content_type"] = node.content_type.value
+        ctype = node.content_type.value if hasattr(node.content_type, "value") else node.content_type
+        if ctype != "unknown":
+            d["content_type"] = ctype
         if include_text and node.text:
             d["text"] = node.text
         if node.children:
