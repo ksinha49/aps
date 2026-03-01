@@ -164,6 +164,12 @@ src/scout_ai/
 ├── formatters/                   # Generic formatter interface
 │   └── pdf_formatter.py          # Base PDFFormatter class
 │
+├── inference/                    # Pluggable inference backends
+│   ├── __init__.py               # Public API exports
+│   ├── protocols.py              # IInferenceBackend Protocol + data models
+│   ├── factory.py                # create_inference_backend() — dotted-path loading
+│   └── realtime.py               # RealTimeBackend (built-in, wraps litellm)
+│
 ├── persistence/                  # Pluggable storage backends
 │   ├── protocols.py              # IPersistenceBackend Protocol
 │   ├── file_backend.py           # Local JSON file storage
@@ -223,7 +229,23 @@ Convention-based domain modules discovered by `DomainRegistry`. Each domain prov
 ### 5. Pluggable Persistence
 `IPersistenceBackend` Protocol with file, S3, and memory implementations. Tests use in-memory backend.
 
-### 6. Legacy Backward Compatibility
+### 6. Pluggable Inference Backends
+`IInferenceBackend` Protocol with a built-in `RealTimeBackend` (wraps `litellm.acompletion()`). External projects can provide alternative backends (e.g., Bedrock Batch, IDP adapters) without modifying Scout AI. Switching is one env var:
+
+```bash
+# Default — current real-time behavior
+export SCOUT_LLM_INFERENCE_BACKEND=realtime
+
+# External Bedrock Batch backend (lives in a separate project)
+export SCOUT_LLM_INFERENCE_BACKEND=ameritas_bedrock_batch.backend:BedrockBatchBackend
+
+# External IDP adapter (lives in a separate project)
+export SCOUT_LLM_INFERENCE_BACKEND=ameritas_idp.adapter:IDPInferenceBackend
+```
+
+The factory uses the same dotted-path import pattern as the Domain Registry. External backends receive the full `AppSettings` for self-configuration.
+
+### 7. Legacy Backward Compatibility
 All original imports from `scout_ai.*` still work. Old `aps/` and `providers/pageindex/medical_classifier.py` files are thin re-export shims.
 
 ---
@@ -290,7 +312,7 @@ All settings use pydantic-settings with environment variable prefixes:
 
 | Prefix | Config Class | Purpose |
 |--------|-------------|---------|
-| `SCOUT_LLM_` | `LLMConfig` | Model provider, API key, temperature |
+| `SCOUT_LLM_` | `LLMConfig` | Model provider, API key, temperature, inference backend |
 | `SCOUT_INDEXING_` | `IndexingConfig` | TOC detection, node limits |
 | `SCOUT_ENRICHMENT_` | `EnrichmentConfig` | Summary, classification toggles |
 | `SCOUT_RETRIEVAL_` | `RetrievalConfig` | Concurrency, top-k |
@@ -348,10 +370,10 @@ python3 /tmp/run_underwriting_demo.py
 
 ## Test Infrastructure
 
-- **390 tests** across unit and integration suites
+- **416 tests** across unit and integration suites
 - All async tests use `asyncio_mode = "auto"`
 - Integration tests mock the OpenAI API at the HTTP level using `respx`
-- Test fakes: `FakeStrandsModel` (canned responses), `FakePersistenceBackend` (dict-backed)
+- Test fakes: `FakeStrandsModel` (canned responses), `FakePersistenceBackend` (dict-backed), `FakeInferenceBackend` (canned inference responses + call recording)
 - PDF tests use `pytest.importorskip("reportlab")` for optional dependency
 
 ---

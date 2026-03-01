@@ -32,6 +32,7 @@ Ameritas processes thousands of structured and semi-structured documents across 
 | Tree-based retrieval | LLM-reasoned search over hierarchical index | Direct reuse |
 | Tiered extraction | Batch (Tier 1) + individual reasoning (Tier 2/3) | Direct reuse |
 | LLM provider switching | Bedrock, OpenAI, Ollama, LiteLLM, vLLM | Direct reuse |
+| Pluggable inference | Real-time (built-in), Bedrock Batch, IDP adapters via env var | Direct reuse |
 | Observability | Audit logging, token cost tracking, OpenTelemetry | Direct reuse |
 | Resilience | Circuit breaker, dead letter queue, checkpointing | Direct reuse |
 | Persistence | File, S3, in-memory backends via Protocol | Direct reuse |
@@ -112,6 +113,28 @@ flowchart LR
 
 Switch providers with a single environment variable. No code changes. Local dev uses Ollama; staging uses vLLM behind LiteLLM; production uses Bedrock.
 
+### Pluggable Inference Backends
+
+```mermaid
+flowchart LR
+    A[IInferenceBackend Protocol] --> B[RealTimeBackend — litellm, built-in]
+    A --> C[BedrockBatchBackend — external project]
+    A --> D[IDPInferenceBackend — external project]
+    A --> E[Your Backend — any async inference]
+```
+
+Switch inference backends with one env var — no code changes:
+
+```bash
+# Default — current real-time behavior
+export SCOUT_LLM_INFERENCE_BACKEND=realtime
+
+# Bedrock Batch (external project, dotted-path import)
+export SCOUT_LLM_INFERENCE_BACKEND=ameritas_bedrock_batch.backend:BedrockBatchBackend
+```
+
+External backends implement two async methods (`infer`, `infer_batch`) and receive `AppSettings` for self-configuration. The factory uses the same dotted-path loading pattern as the Domain Registry.
+
 ### Pluggable Persistence
 
 ```mermaid
@@ -175,7 +198,7 @@ Each of these follows the same pattern: define questions, describe categories, w
 git clone https://github.com/ksinha49/aps.git my-domain-project
 cd my-domain-project
 pip install -e ".[dev]"
-pytest tests/ -v  # Verify 390+ tests pass
+pytest tests/ -v  # Verify 416+ tests pass
 ```
 
 ### Step 2: Create Your Domain Package
@@ -288,7 +311,7 @@ All settings use pydantic-settings with environment variable prefixes. No config
 
 | Prefix | Purpose | Example |
 |---|---|---|
-| `SCOUT_LLM_` | LLM provider, model, temperature | `SCOUT_LLM_PROVIDER=bedrock` |
+| `SCOUT_LLM_` | LLM provider, model, temperature, inference backend | `SCOUT_LLM_INFERENCE_BACKEND=realtime` |
 | `SCOUT_INDEXING_` | TOC detection, node limits | `SCOUT_INDEXING_MAX_PAGES_PER_NODE=4` |
 | `SCOUT_EXTRACTION_` | Batch size, context limits | `SCOUT_EXTRACTION_BATCH_SIZE=20` |
 | `SCOUT_PERSISTENCE_` | Backend type, S3 bucket | `SCOUT_PERSISTENCE_BACKEND=s3` |
@@ -342,6 +365,7 @@ Python 3.10+ required.
 │   ├── domains/            # Domain modules (auto-discovered)
 │   │   ├── aps/            # APS domain (production-ready)
 │   │   └── workers_comp/   # Workers' comp (scaffold)
+│   ├── inference/          # Pluggable inference backends (Protocol-based)
 │   ├── persistence/        # Storage backends (Protocol-based)
 │   ├── providers/          # Legacy provider implementations
 │   ├── prompts/            # Prompt registry + templates
@@ -350,7 +374,7 @@ Python 3.10+ required.
 ├── tests/
 │   ├── unit/               # 300+ unit tests
 │   ├── integration/        # Mocked LLM integration tests
-│   └── fakes/              # FakeStrandsModel, FakePersistenceBackend
+│   └── fakes/              # FakeStrandsModel, FakePersistenceBackend, FakeInferenceBackend
 ├── deploy/                 # ECS, EKS, RHEL deployment configs
 ├── docker/                 # Production + dev Dockerfiles
 ├── PROJECT.md              # Detailed architecture documentation

@@ -84,6 +84,11 @@ src/scout_ai/
 │   ├── extraction_agent.py       # create_extraction_agent(settings)
 │   └── orchestrator.py           # ExtractionPipeline — sequential retrieve→extract
 │
+├── inference/                    # Pluggable inference backends
+│   ├── protocols.py              # IInferenceBackend Protocol + InferenceRequest/InferenceResult
+│   ├── factory.py                # create_inference_backend() — dotted-path loading
+│   └── realtime.py               # RealTimeBackend (built-in, wraps litellm)
+│
 ├── skills/                       # @tool-decorated Strands skills
 │   ├── common/                   # Shared: json_parser, token_counter
 │   ├── indexing/                  # detect_toc, process_toc, verify_toc, split_nodes, enrich_nodes, build_index
@@ -152,6 +157,7 @@ src/scout_ai/
 - **Model provider factory**: `agents/factory.py` switches between `BedrockModel`, `OpenAIModel`, `OllamaModel`, `LiteLLMModel` based on `settings.llm.provider`.
 - **Legacy backward compat**: All original imports from `scout_ai.*` still work. Old `aps/` and `providers/pageindex/medical_classifier.py` files are thin re-export shims.
 - **Prompt registry**: `get_prompt("aps", "indexing", "DETECT_TOC_PROMPT")` lazy-loads from `prompts/templates/aps/indexing.py`.
+- **Pluggable inference**: `IInferenceBackend` Protocol with built-in `RealTimeBackend`. External backends (Bedrock Batch, IDP) loaded via dotted-path factory. Switch with `SCOUT_LLM_INFERENCE_BACKEND` env var.
 - **Pluggable persistence**: `IPersistenceBackend` Protocol with file, S3, and memory implementations.
 - All LLM interaction in legacy path goes through `LLMClient.complete()` / `complete_batch()`.
 - The indexer has a fallback cascade: heuristic → Mode 1 → Mode 2 → Mode 3, each progressively more LLM-dependent.
@@ -163,7 +169,7 @@ All settings use pydantic-settings with env var prefixes:
 
 | Prefix | Config Class | Purpose |
 |--------|-------------|---------|
-| `SCOUT_LLM_` | `LLMConfig` | Model provider, API key, temperature |
+| `SCOUT_LLM_` | `LLMConfig` | Model provider, API key, temperature, inference backend |
 | `SCOUT_INDEXING_` | `IndexingConfig` | TOC detection, node limits |
 | `SCOUT_ENRICHMENT_` | `EnrichmentConfig` | Summary, classification toggles |
 | `SCOUT_RETRIEVAL_` | `RetrievalConfig` | Concurrency, top-k |
