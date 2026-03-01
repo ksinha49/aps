@@ -36,20 +36,14 @@ from scout_ai.providers.pageindex.tree_utils import (
 log = logging.getLogger(__name__)
 
 
-def _default_prompt(name: str) -> str:
-    """Lazy-load a prompt from the APS registry as fallback."""
+def _default_prompt(name: str, domain: str = "aps") -> str:
+    """Lazy-load a prompt from the domain registry with base fallback."""
     from scout_ai.prompts.registry import get_prompt
 
-    _PROMPT_CATEGORY: dict[str, tuple[str, str]] = {
-        "TOC_DETECT_PROMPT": ("aps", "indexing"),
-        "GENERATE_TOC_INIT_PROMPT": ("aps", "indexing"),
-        "GENERATE_TOC_CONTINUE_PROMPT": ("aps", "indexing"),
-        "CHECK_TITLE_APPEARANCE_PROMPT": ("aps", "indexing"),
-        "CHECK_TITLE_START_PROMPT": ("aps", "indexing"),
-        "GENERATE_SUMMARY_PROMPT": ("aps", "indexing"),
-    }
-    domain, category = _PROMPT_CATEGORY[name]
-    return get_prompt(domain, category, name)
+    try:
+        return get_prompt(domain, "indexing", name)
+    except KeyError:
+        return get_prompt("base", "indexing", name)
 
 
 class ScoutIndexer(IIngestionProvider):
@@ -69,11 +63,13 @@ class ScoutIndexer(IIngestionProvider):
         settings: ScoutSettings,
         client: LLMClient,
         *,
+        domain: str = "aps",
         classifier: Any | None = None,
         prompts: dict[str, str] | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
+        self._domain = domain
         self._tc = TokenCounter(method=settings.tokenizer_method, model=settings.tokenizer_model)
         self._tree_builder = TreeBuilder(self._tc)
         if classifier is not None:
@@ -91,7 +87,7 @@ class ScoutIndexer(IIngestionProvider):
         """Resolve a prompt by name: injected dict first, then registry fallback."""
         if name in self._prompts:
             return self._prompts[name]
-        prompt = _default_prompt(name)
+        prompt = _default_prompt(name, domain=self._domain)
         self._prompts[name] = prompt
         return prompt
 

@@ -15,19 +15,25 @@ if TYPE_CHECKING:
     from scout_ai.core.config import AppSettings
 
 
-def create_model(settings: AppSettings) -> Model:
+def create_model(settings: AppSettings, model_override: str = "") -> Model:
     """Instantiate a Strands model from application settings.
 
     Lazy-imports provider-specific modules so that only the chosen
     provider's SDK needs to be installed.
+
+    Args:
+        settings: Application settings (drives provider selection + model params).
+        model_override: If non-empty, used instead of ``settings.llm.model``.
+            Typically populated from ``settings.stage_models.<stage>_model``.
     """
     provider = settings.llm.provider
+    effective_model = model_override or settings.llm.model
 
     if provider == "bedrock":
         from strands.models.bedrock import BedrockModel
 
         return BedrockModel(
-            model_id=settings.llm.model,
+            model_id=effective_model,
             region_name=settings.llm.aws_region,
             temperature=settings.llm.temperature,
             top_p=settings.llm.top_p,
@@ -51,7 +57,7 @@ def create_model(settings: AppSettings) -> Model:
 
         return OpenAIModel(
             client_args=client_args,
-            model_id=settings.llm.model,
+            model_id=effective_model,
             params=params,
         )
 
@@ -64,7 +70,7 @@ def create_model(settings: AppSettings) -> Model:
 
         return OllamaModel(
             host=host,
-            model_id=settings.llm.model,
+            model_id=effective_model,
         )
 
     if provider == "anthropic":
@@ -78,7 +84,7 @@ def create_model(settings: AppSettings) -> Model:
                 {"location": "message", "role": "system"}
             ]
         return LiteLLMModel(
-            model_id=f"anthropic/{settings.llm.model}",
+            model_id=f"anthropic/{effective_model}",
             model_kwargs=model_kwargs,
         )
 
@@ -93,7 +99,7 @@ def create_model(settings: AppSettings) -> Model:
                 {"location": "message", "role": "system"}
             ]
         return LiteLLMModel(
-            model_id=settings.llm.model,
+            model_id=effective_model,
             model_kwargs=litellm_kwargs,
         )
 

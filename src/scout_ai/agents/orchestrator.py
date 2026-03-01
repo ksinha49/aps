@@ -45,9 +45,11 @@ class ExtractionPipeline:
         self,
         retrieval_provider: IRetrievalProvider,
         chat_provider: IChatProvider,
+        domain: str = "aps",
     ) -> None:
         self._retrieval = retrieval_provider
         self._chat = chat_provider
+        self._domain = domain
 
     async def run(
         self,
@@ -147,7 +149,7 @@ class ExtractionPipeline:
             document_metadata: Optional metadata passed to synthesis.
             rules_engine: Optional validation engine for post-synthesis checks.
             synthesis_pipeline: Optional domain synthesis pipeline. If None,
-                falls back to APS SynthesisPipeline for backward compatibility.
+                resolved from the domain registry using ``self._domain``.
 
         Returns:
             Tuple of (extraction results, optional summary,
@@ -159,14 +161,21 @@ class ExtractionPipeline:
         validation_report: ValidationReport | None = None
         if synthesize:
             if synthesis_pipeline is None:
-                from scout_ai.domains.aps.synthesis.pipeline import SynthesisPipeline
+                from scout_ai.domains.registry import get_registry
+
+                try:
+                    domain_config = get_registry().get(self._domain)
+                    SynthCls = domain_config.resolve("synthesis_pipeline")
+                except (KeyError, ValueError) as e:
+                    log.warning("No synthesis pipeline for domain %r: %s", self._domain, e)
+                    return batch_results, None, None
 
                 cache_enabled = getattr(self._chat, "_cache_enabled", False)
                 client = getattr(self._chat, "_client", None)
                 if client is None:
                     log.warning("Cannot synthesize: chat provider has no _client attribute")
                     return batch_results, None, None
-                synthesis_pipeline = SynthesisPipeline(client, cache_enabled=cache_enabled)
+                synthesis_pipeline = SynthCls(client, cache_enabled=cache_enabled)
 
             metadata = document_metadata or {"doc_id": index.doc_id, "doc_name": index.doc_name}
             try:
@@ -268,4 +277,4 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
     )
     chat = ScoutChat(legacy_settings, client, domain=settings.domain)
 
-    return ExtractionPipeline(retrieval, chat)
+    return ExtractionPipeline(retrieval, chat, domain=settings.domain)
