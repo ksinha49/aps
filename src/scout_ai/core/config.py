@@ -61,7 +61,7 @@ class EnrichmentConfig(BaseSettings):
     model_config = {"env_prefix": "SCOUT_ENRICHMENT_"}
 
     enable_node_summaries: bool = True
-    enable_medical_classification: bool = True
+    enable_section_classification: bool = True
     enable_doc_description: bool = False
 
 
@@ -224,8 +224,13 @@ class AppSettings(BaseSettings):
     """Top-level application settings aggregating all sub-configs.
 
     Each sub-config reads its own ``SCOUT_<GROUP>_*`` env vars.
+
+    The ``domain`` field selects the active document domain (e.g. "aps",
+    "workers_comp"). Domain-specific configuration is resolved from the
+    ``DomainRegistry`` at runtime.
     """
 
+    domain: str = "aps"
     llm: LLMConfig = LLMConfig()
     indexing: IndexingConfig = IndexingConfig()
     enrichment: EnrichmentConfig = EnrichmentConfig()

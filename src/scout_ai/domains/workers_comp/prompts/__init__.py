@@ -1,0 +1,1 @@
+"""Workers' comp prompt templates."""

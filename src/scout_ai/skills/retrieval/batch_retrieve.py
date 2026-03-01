@@ -14,8 +14,6 @@ from typing import Any
 from strands import tool
 from strands.types.tools import ToolContext
 
-from scout_ai.domains.aps.categories import CATEGORY_DESCRIPTIONS
-from scout_ai.domains.aps.models import ExtractionCategory
 from scout_ai.models import (
     DocumentIndex,
     ExtractionQuestion,
@@ -67,15 +65,12 @@ def batch_retrieve(  # type: ignore[assignment]
     if settings:
         top_k = settings.retrieval.top_k_nodes
 
-    # Resolve category descriptions — supports both enum keys and str keys
+    # Resolve category descriptions from domain registry
+    category_descs = _get_category_descriptions(tool_context)
+
     category_tasks = []
     for cat_str, cat_questions in by_category.items():
-        category_desc = cat_str
-        try:
-            cat_enum = ExtractionCategory(cat_str)
-            category_desc = CATEGORY_DESCRIPTIONS.get(cat_enum, cat_str)
-        except ValueError:
-            pass
+        category_desc = category_descs.get(cat_str, cat_str)
         category_tasks.append({
             "category": cat_str,
             "category_description": category_desc,
@@ -102,6 +97,7 @@ def resolve_batch_results(
     index: DocumentIndex,
     category_results: dict[str, dict[str, Any]],
     top_k: int = 5,
+    category_descriptions: dict[str, str] | None = None,
 ) -> dict[str, RetrievalResult]:
     """Pure logic: resolve category-level results to RetrievalResults.
 
@@ -110,10 +106,13 @@ def resolve_batch_results(
         category_results: Dict mapping category value string to
             {'node_ids': [...], 'reasoning': '...'}.
         top_k: Maximum nodes per category.
+        category_descriptions: Optional mapping of category str to
+            human-readable descriptions.
 
     Returns:
         Dict mapping category string to RetrievalResult.
     """
+    descs = category_descriptions or {}
     node_map = create_node_mapping(index.tree)
     results: dict[str, RetrievalResult] = {}
 
@@ -138,13 +137,7 @@ def resolve_batch_results(
 
         source_pages = get_source_pages(matched_nodes) if matched_nodes else []
 
-        # Try to get a description from APS categories
-        category_desc = cat_str
-        try:
-            cat_enum = ExtractionCategory(cat_str)
-            category_desc = CATEGORY_DESCRIPTIONS.get(cat_enum, cat_str)
-        except ValueError:
-            pass
+        category_desc = descs.get(cat_str, cat_str)
 
         results[cat_str] = RetrievalResult(
             query=f"[{cat_str}] {category_desc}",
@@ -154,6 +147,29 @@ def resolve_batch_results(
         )
 
     return results
+
+
+def _get_category_descriptions(tool_context: ToolContext) -> dict[str, str]:
+    """Resolve category descriptions from invocation state or domain registry."""
+    # Check invocation state first (set by pipeline)
+    descs = tool_context.invocation_state.get("category_descriptions")  # type: ignore[union-attr]
+    if descs:
+        return descs
+
+    # Fall back to domain registry
+    settings = tool_context.invocation_state.get("settings")  # type: ignore[union-attr]
+    domain_name = "aps"
+    if settings and hasattr(settings, "domain"):
+        domain_name = settings.domain
+
+    try:
+        from scout_ai.domains.registry import get_registry
+
+        registry = get_registry()
+        domain_config = registry.get(domain_name)
+        return domain_config.category_descriptions
+    except (KeyError, ImportError):
+        return {}
 
 
 def _ensure_questions(questions_raw: list[Any]) -> list[ExtractionQuestion]:

@@ -38,7 +38,7 @@ class ScoutSettings(BaseSettings):
 
     # ── Node enrichment ──────────────────────────────────────────────
     enable_node_summaries: bool = True
-    enable_medical_classification: bool = True
+    enable_section_classification: bool = True
     enable_doc_description: bool = False
 
     # ── Retrieval ────────────────────────────────────────────────────

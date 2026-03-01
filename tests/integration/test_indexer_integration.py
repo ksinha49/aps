@@ -33,7 +33,7 @@ def mock_settings():
         llm_model="test-model",
         tokenizer_method="approximate",
         enable_node_summaries=False,
-        enable_medical_classification=True,
+        enable_section_classification=True,
         enable_doc_description=False,
         max_pages_per_node=3,
         max_tokens_per_node=500,
@@ -84,7 +84,7 @@ class TestIndexerNoToc:
     async def test_build_index_no_toc_fallback(self, mock_settings, sample_pages):
         """When heuristics find < 3 sections and no TOC, uses LLM generation."""
         # Disable medical classification to force LLM path
-        mock_settings.enable_medical_classification = False
+        mock_settings.enable_section_classification = False
         client = LLMClient(mock_settings)
         indexer = ScoutIndexer(mock_settings, client)
 

@@ -30,6 +30,7 @@ class ExtractRequest(BaseModel):
     doc_id: str
     questions: list[ExtractQuestion]
     synthesize: bool = False
+    domain: str = "aps"
     prompt_context: PromptContextOverride | None = None
 
 
@@ -306,5 +307,5 @@ async def export_summary(request: ExportRequest, req: Request) -> StreamingRespo
     return StreamingResponse(
         BytesIO(output_bytes),
         media_type=formatter.content_type,
-        headers={"Content-Disposition": f'attachment; filename="aps_summary_{safe_doc_id}.{request.output_format}"'},
+        headers={"Content-Disposition": f'attachment; filename="summary_{safe_doc_id}.{request.output_format}"'},
     )

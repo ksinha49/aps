@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 
 from scout_ai.models import (
     DocumentIndex,
-    ExtractionCategory,
     ExtractionQuestion,
     RetrievalResult,
 )
@@ -27,5 +26,5 @@ class IRetrievalProvider(ABC):
         self,
         index: DocumentIndex,
         questions: list[ExtractionQuestion],
-    ) -> dict[ExtractionCategory, RetrievalResult]:
+    ) -> dict[str, RetrievalResult]:
         """Category-batched multi-question retrieval."""

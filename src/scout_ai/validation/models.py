@@ -17,16 +17,34 @@ class IssueSeverity(str, Enum):
 
 
 class RuleCategory(str, Enum):
-    """Category of a validation rule."""
+    """Category of a validation rule.
+
+    Domains may define additional categories beyond these core values.
+    Use string values directly for domain-specific categories.
+    """
 
     DATA_INTEGRITY = "data_integrity"
     MEDICAL_BUSINESS = "medical_business"
     EVIDENCE_GROUNDING = "evidence_grounding"
     RISK_CLASSIFICATION = "risk_classification"
 
+    @classmethod
+    def _missing_(cls, value: object) -> RuleCategory | None:
+        """Allow arbitrary string values for domain extensibility."""
+        if isinstance(value, str):
+            obj = str.__new__(cls, value)
+            obj._value_ = value
+            obj._name_ = value.upper()
+            return obj
+        return None
+
 
 class RuleTarget(str, Enum):
-    """What entity type a rule validates."""
+    """What entity type a rule validates.
+
+    Domains may define additional targets beyond these core values.
+    Use string values directly for domain-specific targets.
+    """
 
     FINDING = "finding"
     CONDITION = "condition"
@@ -36,6 +54,16 @@ class RuleTarget(str, Enum):
     RISK_CLASSIFICATION = "risk_classification"
     SECTION = "section"
     SUMMARY = "summary"
+
+    @classmethod
+    def _missing_(cls, value: object) -> RuleTarget | None:
+        """Allow arbitrary string values for domain extensibility."""
+        if isinstance(value, str):
+            obj = str.__new__(cls, value)
+            obj._value_ = value
+            obj._name_ = value.upper()
+            return obj
+        return None
 
 
 @dataclass(frozen=True)

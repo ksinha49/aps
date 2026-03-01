@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from scout_ai.aps.prompts import BATCH_EXTRACTION_PROMPT, INDIVIDUAL_EXTRACTION_PROMPT
 from scout_ai.config import ScoutSettings
 from scout_ai.interfaces.chat import IChatProvider
 from scout_ai.models import Citation, ExtractionQuestion, ExtractionResult
@@ -22,8 +21,8 @@ log = logging.getLogger(__name__)
 
 TIER1_BATCH_SIZE = 20
 
-_CACHED_SYSTEM_TEMPLATE = (
-    "You are extracting information from an APS (Attending Physician Statement) medical record.\n"
+_DEFAULT_SYSTEM_TEMPLATE = (
+    "You are extracting information from a document.\n"
     "Answer each question based ONLY on the provided context. If the answer is not found, say \"Not found\".\n\n"
     "Document Context:\n{context}"
 )
@@ -97,10 +96,16 @@ class ScoutChat(IChatProvider):
         client: LLMClient,
         *,
         cache_enabled: bool = False,
+        batch_extraction_prompt: str | None = None,
+        individual_extraction_prompt: str | None = None,
+        system_template: str | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
         self._cache_enabled = cache_enabled
+        self._batch_extraction_prompt = batch_extraction_prompt or ""
+        self._individual_extraction_prompt = individual_extraction_prompt or ""
+        self._system_template = system_template or _DEFAULT_SYSTEM_TEMPLATE
 
     async def extract_answers(
         self,
@@ -121,7 +126,7 @@ class ScoutChat(IChatProvider):
         # Build cacheable system prompt with document context
         system_prompt: str | None = None
         if self._cache_enabled:
-            system_prompt = _CACHED_SYSTEM_TEMPLATE.format(context=context[:8000])
+            system_prompt = self._system_template.format(context=context[:8000])
 
         results: list[ExtractionResult] = []
 
@@ -150,7 +155,7 @@ class ScoutChat(IChatProvider):
 
     async def chat(self, query: str, context: str) -> str:
         """Free-form completion over context."""
-        prompt = f"""Based on the following medical record context, answer the question.
+        prompt = f"""Based on the following document context, answer the question.
 
 Context:
 {context}
@@ -222,7 +227,11 @@ Provide a detailed answer based only on the provided context."""
             prompt = _CACHED_BATCH_PROMPT.format(questions=questions_text)
         else:
             # Legacy path: context + questions in a single user message
-            prompt = BATCH_EXTRACTION_PROMPT.format(
+            if not self._batch_extraction_prompt:
+                from scout_ai.prompts.registry import get_prompt
+
+                self._batch_extraction_prompt = get_prompt("aps", "extraction", "BATCH_EXTRACTION_PROMPT")
+            prompt = self._batch_extraction_prompt.format(
                 context=context[:8000],
                 questions=questions_text,
             )
@@ -275,7 +284,11 @@ Provide a detailed answer based only on the provided context."""
             prompt = _CACHED_INDIVIDUAL_PROMPT.format(question=question.question_text)
         else:
             # Legacy path
-            prompt = INDIVIDUAL_EXTRACTION_PROMPT.format(
+            if not self._individual_extraction_prompt:
+                from scout_ai.prompts.registry import get_prompt
+
+                self._individual_extraction_prompt = get_prompt("aps", "extraction", "INDIVIDUAL_EXTRACTION_PROMPT")
+            prompt = self._individual_extraction_prompt.format(
                 context=context[:8000],
                 question=question.question_text,
             )

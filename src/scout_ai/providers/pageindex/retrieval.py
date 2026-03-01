@@ -10,12 +10,10 @@ import json
 import logging
 from typing import Any
 
-from scout_ai.aps.prompts import TREE_SEARCH_PROMPT
 from scout_ai.config import ScoutSettings
 from scout_ai.interfaces.retrieval import IRetrievalProvider
 from scout_ai.models import (
     DocumentIndex,
-    ExtractionCategory,
     ExtractionQuestion,
     RetrievalResult,
 )
@@ -32,9 +30,16 @@ log = logging.getLogger(__name__)
 class ScoutRetrieval(IRetrievalProvider):
     """Tree-based retrieval: LLM reasons over document structure to find relevant nodes."""
 
-    def __init__(self, settings: ScoutSettings, client: LLMClient) -> None:
+    def __init__(
+        self,
+        settings: ScoutSettings,
+        client: LLMClient,
+        *,
+        tree_search_prompt: str | None = None,
+    ) -> None:
         self._settings = settings
         self._client = client
+        self._tree_search_prompt = tree_search_prompt or ""
 
     async def retrieve(
         self,
@@ -44,7 +49,11 @@ class ScoutRetrieval(IRetrievalProvider):
     ) -> RetrievalResult:
         """Search the tree for nodes relevant to *query*."""
         tree_structure = json.dumps(tree_to_dict(index.tree), indent=2)
-        prompt = TREE_SEARCH_PROMPT.format(
+        if not self._tree_search_prompt:
+            from scout_ai.prompts.registry import get_prompt
+
+            self._tree_search_prompt = get_prompt("aps", "retrieval", "TREE_SEARCH_PROMPT")
+        prompt = self._tree_search_prompt.format(
             tree_structure=tree_structure,
             query=query,
             top_k=top_k,
@@ -86,7 +95,7 @@ class ScoutRetrieval(IRetrievalProvider):
         self,
         index: DocumentIndex,
         questions: list[ExtractionQuestion],
-    ) -> dict[ExtractionCategory, RetrievalResult]:
+    ) -> dict[str, RetrievalResult]:
         """Category-batched retrieval — delegates to BatchRetrieval."""
         from scout_ai.providers.pageindex.batch_retrieval import BatchRetrieval
 

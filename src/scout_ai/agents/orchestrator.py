@@ -14,7 +14,6 @@ import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from scout_ai.domains.aps.models import UnderwriterSummary
 from scout_ai.models import (
     BatchExtractionResult,
     DocumentIndex,
@@ -115,7 +114,8 @@ class ExtractionPipeline:
         synthesize: bool = True,
         document_metadata: dict[str, Any] | None = None,
         rules_engine: RulesEngine | None = None,
-    ) -> tuple[list[BatchExtractionResult], UnderwriterSummary | None, ValidationReport | None]:
+        synthesis_pipeline: Any | None = None,
+    ) -> tuple[list[BatchExtractionResult], Any | None, ValidationReport | None]:
         """Full pipeline: retrieve -> extract -> synthesize -> validate.
 
         Args:
@@ -125,28 +125,30 @@ class ExtractionPipeline:
             synthesize: Whether to run the synthesis step.
             document_metadata: Optional metadata passed to synthesis.
             rules_engine: Optional validation engine for post-synthesis checks.
+            synthesis_pipeline: Optional domain synthesis pipeline. If None,
+                falls back to APS SynthesisPipeline for backward compatibility.
 
         Returns:
-            Tuple of (extraction results, optional underwriter summary,
+            Tuple of (extraction results, optional summary,
             optional validation report).
         """
         batch_results = await self.run(index, questions, pages=pages)
 
-        summary: UnderwriterSummary | None = None
+        summary: Any | None = None
         validation_report: ValidationReport | None = None
         if synthesize:
-            from scout_ai.domains.aps.synthesis.pipeline import SynthesisPipeline
+            if synthesis_pipeline is None:
+                from scout_ai.domains.aps.synthesis.pipeline import SynthesisPipeline
 
-            # Determine cache_enabled from chat provider if available
-            cache_enabled = getattr(self._chat, "_cache_enabled", False)
-            client = getattr(self._chat, "_client", None)
-            if client is None:
-                log.warning("Cannot synthesize: chat provider has no _client attribute")
-                return batch_results, None, None
+                cache_enabled = getattr(self._chat, "_cache_enabled", False)
+                client = getattr(self._chat, "_client", None)
+                if client is None:
+                    log.warning("Cannot synthesize: chat provider has no _client attribute")
+                    return batch_results, None, None
+                synthesis_pipeline = SynthesisPipeline(client, cache_enabled=cache_enabled)
 
-            synth = SynthesisPipeline(client, cache_enabled=cache_enabled)
             metadata = document_metadata or {"doc_id": index.doc_id, "doc_name": index.doc_name}
-            summary = await synth.synthesize(batch_results, metadata)
+            summary = await synthesis_pipeline.synthesize(batch_results, metadata)
 
         return batch_results, summary, validation_report
 
@@ -192,14 +194,14 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
     """Create an ExtractionPipeline using the legacy providers.
 
     This factory uses the existing provider classes until the full
-    Strands agent migration is complete.
+    Strands agent migration is complete. Domain-specific prompts and
+    category descriptions are resolved from the domain registry.
     """
     from scout_ai.config import ScoutSettings
     from scout_ai.providers.pageindex.chat import ScoutChat
     from scout_ai.providers.pageindex.client import LLMClient
     from scout_ai.providers.pageindex.retrieval import ScoutRetrieval
 
-    # Bridge new AppSettings to legacy ScoutSettings
     legacy_settings = ScoutSettings(
         llm_base_url=settings.llm.base_url,
         llm_api_key=settings.llm.api_key,

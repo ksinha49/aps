@@ -16,20 +16,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from scout_ai.aps.prompts import (
-    CHECK_TITLE_APPEARANCE_PROMPT,
-    CHECK_TITLE_START_PROMPT,
-    GENERATE_SUMMARY_PROMPT,
-    GENERATE_TOC_CONTINUE_PROMPT,
-    GENERATE_TOC_INIT_PROMPT,
-    TOC_DETECT_PROMPT,
-)
 from scout_ai.config import ScoutSettings
 from scout_ai.exceptions import IndexBuildError
 from scout_ai.interfaces.ingestion import IIngestionProvider
 from scout_ai.models import DocumentIndex, PageContent, TreeNode
 from scout_ai.providers.pageindex.client import LLMClient
-from scout_ai.providers.pageindex.medical_classifier import MedicalSectionClassifier
 from scout_ai.providers.pageindex.tokenizer import TokenCounter
 from scout_ai.providers.pageindex.tree_builder import TreeBuilder
 from scout_ai.providers.pageindex.tree_utils import (
@@ -45,6 +36,22 @@ from scout_ai.providers.pageindex.tree_utils import (
 log = logging.getLogger(__name__)
 
 
+def _default_prompt(name: str) -> str:
+    """Lazy-load a prompt from the APS registry as fallback."""
+    from scout_ai.prompts.registry import get_prompt
+
+    _PROMPT_CATEGORY: dict[str, tuple[str, str]] = {
+        "TOC_DETECT_PROMPT": ("aps", "indexing"),
+        "GENERATE_TOC_INIT_PROMPT": ("aps", "indexing"),
+        "GENERATE_TOC_CONTINUE_PROMPT": ("aps", "indexing"),
+        "CHECK_TITLE_APPEARANCE_PROMPT": ("aps", "indexing"),
+        "CHECK_TITLE_START_PROMPT": ("aps", "indexing"),
+        "GENERATE_SUMMARY_PROMPT": ("aps", "indexing"),
+    }
+    domain, category = _PROMPT_CATEGORY[name]
+    return get_prompt(domain, category, name)
+
+
 class ScoutIndexer(IIngestionProvider):
     """Build a hierarchical tree index from pre-OCR'd pages.
 
@@ -53,16 +60,39 @@ class ScoutIndexer(IIngestionProvider):
       2. TOC detected without page numbers → LLM maps sections to pages
       3. No TOC → LLM generates structure from content chunks
 
-    When ``enable_medical_classification`` is True, a regex heuristic
+    When ``enable_section_classification`` is True, a regex heuristic
     pre-pass detects sections before falling back to LLM generation.
     """
 
-    def __init__(self, settings: ScoutSettings, client: LLMClient) -> None:
+    def __init__(
+        self,
+        settings: ScoutSettings,
+        client: LLMClient,
+        *,
+        classifier: Any | None = None,
+        prompts: dict[str, str] | None = None,
+    ) -> None:
         self._settings = settings
         self._client = client
         self._tc = TokenCounter(method=settings.tokenizer_method, model=settings.tokenizer_model)
         self._tree_builder = TreeBuilder(self._tc)
-        self._classifier = MedicalSectionClassifier(client) if settings.enable_medical_classification else None
+        if classifier is not None:
+            self._classifier = classifier
+        elif settings.enable_section_classification:
+            from scout_ai.providers.pageindex.medical_classifier import MedicalSectionClassifier
+
+            self._classifier = MedicalSectionClassifier(client)
+        else:
+            self._classifier = None
+        self._prompts = prompts or {}
+
+    def _get_prompt(self, name: str) -> str:
+        """Resolve a prompt by name: injected dict first, then APS fallback."""
+        if name in self._prompts:
+            return self._prompts[name]
+        prompt = _default_prompt(name)
+        self._prompts[name] = prompt
+        return prompt
 
     async def build_index(
         self,
@@ -218,14 +248,14 @@ class ScoutIndexer(IIngestionProvider):
 
         toc = self._parse_json_response(
             await self._client.complete(
-                GENERATE_TOC_INIT_PROMPT.format(part=group_texts[0])
+                self._get_prompt("GENERATE_TOC_INIT_PROMPT").format(part=group_texts[0])
             )
         )
 
         for group_text in group_texts[1:]:
             additional = self._parse_json_response(
                 await self._client.complete(
-                    GENERATE_TOC_CONTINUE_PROMPT.format(
+                    self._get_prompt("GENERATE_TOC_CONTINUE_PROMPT").format(
                         previous_toc=json.dumps(toc, indent=2), part=group_text
                     )
                 )
@@ -299,7 +329,7 @@ class ScoutIndexer(IIngestionProvider):
             if i >= check_limit and not last_was_toc:
                 break
 
-            prompt = TOC_DETECT_PROMPT.format(content=pages[i].text)
+            prompt = self._get_prompt("TOC_DETECT_PROMPT").format(content=pages[i].text)
             response = await self._client.complete(prompt)
             parsed = self._client.extract_json(response)
             is_toc = parsed.get("toc_detected", "no") == "yes"
@@ -449,7 +479,7 @@ Directly return JSON only."""
         return toc_items
 
     async def _check_single_title_start(self, title: str, page_text: str) -> str:
-        prompt = CHECK_TITLE_START_PROMPT.format(title=title, page_text=page_text)
+        prompt = self._get_prompt("CHECK_TITLE_START_PROMPT").format(title=title, page_text=page_text)
         response = await self._client.complete(prompt)
         parsed = self._client.extract_json(response)
         return parsed.get("start_begin", "no")
@@ -511,7 +541,7 @@ Directly return JSON only."""
             return {"list_index": item.get("list_index"), "answer": "no", "title": item["title"]}
 
         page_text = pages[page_idx].text
-        prompt = CHECK_TITLE_APPEARANCE_PROMPT.format(title=item["title"], page_text=page_text)
+        prompt = self._get_prompt("CHECK_TITLE_APPEARANCE_PROMPT").format(title=item["title"], page_text=page_text)
         response = await self._client.complete(prompt)
         parsed = self._client.extract_json(response)
 
@@ -626,7 +656,7 @@ Directly return JSON only."""
                 node.summary = node.text[:500]
                 return
             async with sem:
-                prompt = GENERATE_SUMMARY_PROMPT.format(text=node.text[:4000])
+                prompt = self._get_prompt("GENERATE_SUMMARY_PROMPT").format(text=node.text[:4000])
                 node.summary = await self._client.complete(prompt)
 
         await asyncio.gather(*[_summarize(n) for n in all_nodes], return_exceptions=True)

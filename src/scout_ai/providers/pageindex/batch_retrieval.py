@@ -12,10 +12,7 @@ import logging
 from collections import defaultdict
 from typing import Any
 
-from scout_ai.aps.categories import CATEGORY_DESCRIPTIONS
-from scout_ai.aps.prompts import CATEGORY_SEARCH_PROMPT
 from scout_ai.config import ScoutSettings
-from scout_ai.domains.aps.models import ExtractionCategory
 from scout_ai.models import (
     DocumentIndex,
     ExtractionQuestion,
@@ -40,10 +37,15 @@ class BatchRetrieval:
         settings: ScoutSettings,
         client: LLMClient,
         retrieval: ScoutRetrieval,
+        *,
+        category_descriptions: dict[str, str] | None = None,
+        category_search_prompt: str | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
         self._retrieval = retrieval
+        self._category_descriptions = category_descriptions or {}
+        self._category_search_prompt = category_search_prompt or ""
 
     async def batch_retrieve(
         self,
@@ -96,17 +98,15 @@ class BatchRetrieval:
         questions: list[ExtractionQuestion],
     ) -> RetrievalResult:
         """Build a synthesized query for a category and search the tree."""
-        # Resolve description from APS categories if possible
-        category_desc = category_str
-        try:
-            cat_enum = ExtractionCategory(category_str)
-            category_desc = CATEGORY_DESCRIPTIONS.get(cat_enum, category_str)
-        except ValueError:
-            pass
+        category_desc = self._category_descriptions.get(category_str, category_str)
 
         # Build a synthesized query from category description
         tree_structure = json.dumps(tree_to_dict(index.tree), indent=2)
-        prompt = CATEGORY_SEARCH_PROMPT.format(
+        if not self._category_search_prompt:
+            from scout_ai.prompts.registry import get_prompt
+
+            self._category_search_prompt = get_prompt("aps", "retrieval", "CATEGORY_SEARCH_PROMPT")
+        prompt = self._category_search_prompt.format(
             category=category_str,
             category_description=category_desc,
             tree_structure=tree_structure,

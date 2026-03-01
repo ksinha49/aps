@@ -72,11 +72,11 @@ def enrich_nodes(  # type: ignore[assignment]
 
     if enable_classification:
         result["nodes_for_classification"] = nodes_for_classification
+        # Resolve section types from domain registry
+        section_types = _get_section_types(tool_context)
+        type_list = ", ".join(section_types) if section_types else "unknown"
         result["classification_instruction"] = (
-            "For each node, classify into one of: face_sheet, progress_note, "
-            "lab_report, imaging, pathology, operative_report, discharge_summary, "
-            "consultation, medication_list, vital_signs, nursing_note, "
-            "therapy_note, mental_health, dental, unknown."
+            f"For each node, classify into one of: {type_list}."
         )
 
     if enable_description:
@@ -86,3 +86,24 @@ def enrich_nodes(  # type: ignore[assignment]
         )
 
     return json.dumps(result)
+
+
+def _get_section_types(tool_context: ToolContext) -> list[str]:
+    """Resolve section types from invocation state or domain registry."""
+    types = tool_context.invocation_state.get("section_types")  # type: ignore[union-attr]
+    if types:
+        return types
+
+    settings = tool_context.invocation_state.get("settings")  # type: ignore[union-attr]
+    domain_name = "aps"
+    if settings and hasattr(settings, "domain"):
+        domain_name = settings.domain
+
+    try:
+        from scout_ai.domains.registry import get_registry
+
+        registry = get_registry()
+        domain_config = registry.get(domain_name)
+        return domain_config.section_types
+    except (KeyError, ImportError):
+        return ["unknown"]
