@@ -72,7 +72,10 @@ class TestPersistenceCheck:
 
             with patch("scout_ai.core.startup_checks.log") as mock_log:
                 validate_settings(settings)
-                mock_log.warning.assert_called()
+                mock_log.warning.assert_called_once_with(
+                    "SCOUT_PERSISTENCE_BACKEND=file in a container environment. "
+                    "Data will be lost on container restart. Consider setting SCOUT_PERSISTENCE_BACKEND=s3."
+                )
 
     def test_warns_file_backend_in_k8s(self):
         settings = AppSettings(persistence=PersistenceConfig(backend="file"))
@@ -81,7 +84,10 @@ class TestPersistenceCheck:
 
             with patch("scout_ai.core.startup_checks.log") as mock_log:
                 validate_settings(settings)
-                mock_log.warning.assert_called()
+                mock_log.warning.assert_called_once_with(
+                    "SCOUT_PERSISTENCE_BACKEND=file in a container environment. "
+                    "Data will be lost on container restart. Consider setting SCOUT_PERSISTENCE_BACKEND=s3."
+                )
 
     def test_no_warning_for_s3_backend(self):
         settings = AppSettings(
@@ -97,15 +103,14 @@ class TestPersistenceCheck:
 
 
 class TestAuthCheck:
-    """Validate auth configuration warnings."""
+    """Validate auth configuration errors."""
 
-    def test_warns_auth_enabled_no_credentials(self):
+    def test_rejects_auth_enabled_no_credentials(self):
         settings = AppSettings(
             llm=LLMConfig(provider="bedrock"),
             auth=AuthConfig(enabled=True, api_keys=[], jwks_url=""),
         )
         from scout_ai.core.startup_checks import validate_settings
 
-        with patch("scout_ai.core.startup_checks.log") as mock_log:
+        with pytest.raises(ValueError, match="no API keys or JWKS URL configured"):
             validate_settings(settings)
-            mock_log.warning.assert_called()

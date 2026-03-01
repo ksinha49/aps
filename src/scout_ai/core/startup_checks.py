@@ -25,6 +25,8 @@ def validate_settings(settings: AppSettings) -> None:
 def _check_api_key(settings: AppSettings) -> None:
     """Reject placeholder API keys for providers that need real ones."""
     if settings.llm.provider not in _NO_KEY_PROVIDERS:
+        # api_key is typed as plain str. If migrated to SecretStr, use
+        # settings.llm.api_key.get_secret_value() instead.
         if settings.llm.api_key in ("no-key", ""):
             raise ValueError(
                 f"SCOUT_LLM_API_KEY is required for provider '{settings.llm.provider}'. "
@@ -46,9 +48,10 @@ def _check_persistence(settings: AppSettings) -> None:
 
 
 def _check_auth(settings: AppSettings) -> None:
-    """Warn about auth configuration issues."""
+    """Reject auth enabled with no credentials — the API would be fully locked."""
     if settings.auth.enabled and not settings.auth.api_keys and not settings.auth.jwks_url:
-        log.warning(
+        raise ValueError(
             "SCOUT_AUTH_ENABLED=true but no API keys or JWKS URL configured. "
-            "All authenticated requests will be rejected."
+            "All authenticated requests would be rejected. "
+            "Set SCOUT_AUTH_API_KEYS or SCOUT_AUTH_JWKS_URL, or disable auth."
         )

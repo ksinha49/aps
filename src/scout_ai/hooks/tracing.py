@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def setup_tracing(config: ObservabilityConfig) -> None:
+def setup_tracing(config: ObservabilityConfig, tenant_id: str = "", lob: str = "") -> None:
     """Initialize OpenTelemetry tracing if enabled in config.
 
     Requires ``strands-agents[otel]`` to be installed.  Does nothing
@@ -38,17 +38,28 @@ def setup_tracing(config: ObservabilityConfig) -> None:
         )
         return
 
-    resource = Resource.create({
+    resource_attrs: dict[str, str] = {
         "service.name": config.service_name,
-    })
+    }
+    if tenant_id:
+        resource_attrs["scout.tenant_id"] = tenant_id
+    if lob:
+        resource_attrs["scout.lob"] = lob
 
+    resource = Resource.create(resource_attrs)
     provider = TracerProvider(resource=resource)
-    exporter = OTLPSpanExporter(endpoint=config.otlp_endpoint)
+    exporter = OTLPSpanExporter(
+        endpoint=config.otlp_endpoint,
+        insecure=config.otlp_insecure,
+    )
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
 
     log.info(
-        "OpenTelemetry tracing enabled — exporting to %s as '%s'",
+        "OpenTelemetry tracing enabled — exporting to %s as '%s' (insecure=%s, tenant=%s, lob=%s)",
         config.otlp_endpoint,
         config.service_name,
+        config.otlp_insecure,
+        tenant_id or "(none)",
+        lob or "(none)",
     )
