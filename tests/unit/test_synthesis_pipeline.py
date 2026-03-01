@@ -15,7 +15,7 @@ from scout_ai.models import (
     RetrievalResult,
 )
 from scout_ai.providers.pageindex.client import LLMClient
-from scout_ai.synthesis.models import SynthesisSection, UnderwriterSummary
+from scout_ai.synthesis.models import APSSummary, SynthesisSection, UnderwriterSummary
 from scout_ai.synthesis.pipeline import SynthesisPipeline
 
 
@@ -232,3 +232,204 @@ class TestSynthesisModels:
         assert summary.risk_factors == []
         assert summary.overall_assessment == ""
         assert summary.total_questions_answered == 0
+
+
+_MOCK_STRUCTURED_RESPONSE = """{
+    "demographics": {
+        "full_name": "John Doe",
+        "date_of_birth": "01/15/1960",
+        "age": "65",
+        "gender": "Male"
+    },
+    "sections": [
+        {
+            "section_key": "medical_history",
+            "title": "Medical History",
+            "content": "Patient has hypertension.",
+            "source_categories": ["medical_history"],
+            "findings": [
+                {
+                    "text": "Hypertension since 2015",
+                    "severity": "MODERATE",
+                    "citations": [
+                        {"page_number": 5, "date": "03/2024", "source_type": "Progress Note"}
+                    ]
+                }
+            ],
+            "conditions": [
+                {
+                    "name": "Hypertension",
+                    "icd10_code": "I10",
+                    "status": "active"
+                }
+            ]
+        },
+        {
+            "section_key": "lab_results",
+            "title": "Laboratory Results",
+            "content": "WBC 7.2 within normal range.",
+            "source_categories": ["lab_results"],
+            "lab_results": [
+                {
+                    "test_name": "WBC",
+                    "value": "7.2",
+                    "unit": "K/uL",
+                    "reference_range": "4.5-11.0",
+                    "flag": "",
+                    "date": "01/2024"
+                }
+            ]
+        }
+    ],
+    "risk_classification": {
+        "tier": "Standard Plus",
+        "table_rating": "",
+        "rationale": "Well-controlled single condition."
+    },
+    "risk_factors": ["Age over 60"],
+    "red_flags": [
+        {
+            "description": "Elevated HbA1c trend",
+            "severity": "SIGNIFICANT",
+            "category": "clinical"
+        }
+    ],
+    "overall_assessment": "Standard plus risk profile."
+}"""
+
+
+class TestStructuredSynthesis:
+    @pytest.mark.asyncio
+    async def test_synthesize_structured_produces_aps_summary(self) -> None:
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_STRUCTURED_RESPONSE
+            summary, _ = await pipeline.synthesize_structured(
+                _make_batch_results(),
+                document_metadata={"doc_id": "test-doc"},
+            )
+
+        assert isinstance(summary, APSSummary)
+        assert summary.document_id == "test-doc"
+        assert summary.demographics.full_name == "John Doe"
+        assert summary.demographics.age == "65"
+        assert len(summary.sections) == 2
+        assert summary.sections[0].section_key == "medical_history"
+        assert len(summary.sections[0].findings) == 1
+        assert summary.sections[0].findings[0].severity == "MODERATE"
+        assert len(summary.sections[0].conditions) == 1
+        assert summary.sections[0].conditions[0].icd10_code == "I10"
+
+    @pytest.mark.asyncio
+    async def test_synthesize_structured_lab_results(self) -> None:
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_STRUCTURED_RESPONSE
+            summary, _ = await pipeline.synthesize_structured(
+                _make_batch_results(),
+                document_metadata={"doc_id": "lab-doc"},
+            )
+
+        lab_section = summary.sections[1]
+        assert lab_section.section_key == "lab_results"
+        assert len(lab_section.lab_results) == 1
+        assert lab_section.lab_results[0].test_name == "WBC"
+        assert lab_section.lab_results[0].flag == ""
+
+    @pytest.mark.asyncio
+    async def test_synthesize_structured_risk_classification(self) -> None:
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_STRUCTURED_RESPONSE
+            summary, _ = await pipeline.synthesize_structured(
+                _make_batch_results(),
+                document_metadata={"doc_id": "risk-doc"},
+            )
+
+        assert summary.risk_classification.tier == "Standard Plus"
+        assert summary.risk_classification.rationale == "Well-controlled single condition."
+
+    @pytest.mark.asyncio
+    async def test_synthesize_structured_red_flags(self) -> None:
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_STRUCTURED_RESPONSE
+            summary, _ = await pipeline.synthesize_structured(
+                _make_batch_results(),
+                document_metadata={"doc_id": "rf-doc"},
+            )
+
+        assert len(summary.red_flags) == 1
+        assert summary.red_flags[0].severity == "SIGNIFICANT"
+        assert summary.red_flags[0].category == "clinical"
+
+    @pytest.mark.asyncio
+    async def test_synthesize_structured_citation_index_populated(self) -> None:
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_STRUCTURED_RESPONSE
+            summary, _ = await pipeline.synthesize_structured(
+                _make_batch_results(),
+                document_metadata={"doc_id": "cit-doc"},
+            )
+
+        # Citation index built from raw extractions
+        assert isinstance(summary.citation_index, dict)
+        assert 1 in summary.citation_index  # Page 1 from demographics
+        assert 5 in summary.citation_index  # Page 5 from lab results
+
+    @pytest.mark.asyncio
+    async def test_synthesize_structured_counts(self) -> None:
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_STRUCTURED_RESPONSE
+            summary, _ = await pipeline.synthesize_structured(
+                _make_batch_results(),
+                document_metadata={"doc_id": "count-doc"},
+            )
+
+        assert summary.total_questions_answered == 4
+        assert summary.high_confidence_count == 3
+        assert summary.generated_at != ""
+
+    @pytest.mark.asyncio
+    async def test_synthesize_structured_uses_structured_prompt(self) -> None:
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_STRUCTURED_RESPONSE
+            await pipeline.synthesize_structured(_make_batch_results())
+
+        # Verify the structured prompt was used (contains section_key)
+        call_args = mock_complete.call_args
+        prompt_text = call_args.args[0]
+        assert "section_key" in prompt_text
+
+    @pytest.mark.asyncio
+    async def test_legacy_synthesize_still_works(self) -> None:
+        """Ensure the original synthesize() is unaffected."""
+        client = LLMClient(_make_settings())
+        pipeline = SynthesisPipeline(client, cache_enabled=False)
+
+        with patch.object(client, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = _MOCK_SYNTHESIS_RESPONSE
+            summary = await pipeline.synthesize(
+                _make_batch_results(),
+                document_metadata={"doc_id": "legacy-doc"},
+            )
+
+        assert isinstance(summary, UnderwriterSummary)
+        assert not isinstance(summary, APSSummary)

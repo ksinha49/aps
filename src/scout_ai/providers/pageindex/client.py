@@ -96,12 +96,16 @@ class LLMClient:
         last_error: Exception | None = None
         for attempt in range(self._settings.llm_max_retries):
             try:
-                response = await acompletion(
-                    model=effective_model,
-                    messages=messages,
-                    temperature=effective_temp,
-                    timeout=self._settings.llm_timeout,
-                )
+                kwargs: dict[str, Any] = {
+                    "model": effective_model,
+                    "messages": messages,
+                    "temperature": effective_temp,
+                    "top_p": self._settings.llm_top_p,
+                    "timeout": self._settings.llm_timeout,
+                }
+                if self._settings.llm_seed is not None:
+                    kwargs["seed"] = self._settings.llm_seed
+                response = await acompletion(**kwargs)
                 content = response.choices[0].message.content or ""
                 reason = response.choices[0].finish_reason
                 mapped_reason = "max_output_reached" if reason == "length" else "finished"

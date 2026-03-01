@@ -1,0 +1,202 @@
+version: 1
+
+rules:
+  # ── Data Integrity ──────────────────────────────────────────────────
+
+  - rule_id: DI-001
+    name: ICD-10 code format
+    description: >-
+      ICD-10 codes must match the standard format: a capital letter
+      followed by 2 digits and an optional decimal with 1-4 digits.
+    category: data_integrity
+    target: condition
+    severity: error
+    params:
+      pattern: "^[A-Z]\\d{2}(\\.\\d{1,4})?$"
+
+  - rule_id: DI-002
+    name: Severity enum validation
+    description: >-
+      Severity values on findings and red flags must be one of the
+      recognized enum values.
+    category: data_integrity
+    target: finding
+    severity: error
+    params:
+      allowed:
+        - CRITICAL
+        - SIGNIFICANT
+        - MODERATE
+        - MINOR
+        - INFORMATIONAL
+
+  - rule_id: DI-003
+    name: Lab flag enum validation
+    description: >-
+      Lab result flags must be H (high), L (low), C (critical), or
+      empty string for normal.
+    category: data_integrity
+    target: lab_result
+    severity: error
+    params:
+      allowed:
+        - H
+        - L
+        - C
+        - ""
+
+  - rule_id: DI-004
+    name: Date format validation
+    description: >-
+      Date fields should match common medical record formats.
+    category: data_integrity
+    target: summary
+    severity: warning
+    params:
+      patterns:
+        - "^\\d{2}/\\d{2}/\\d{4}$"
+        - "^\\d{2}/\\d{4}$"
+        - "^\\d{4}-\\d{2}-\\d{2}$"
+        - "^\\d{4}$"
+
+  # ── Medical Business ────────────────────────────────────────────────
+
+  - rule_id: MB-001
+    name: HbA1c severity threshold
+    description: >-
+      HbA1c lab values above the threshold should have at least
+      the specified minimum severity.
+    category: medical_business
+    target: lab_result
+    severity: warning
+    params:
+      test_names:
+        - HbA1c
+        - Hemoglobin A1c
+        - A1C
+        - Glycated Hemoglobin
+      threshold: 7.0
+      min_severity: MODERATE
+
+  - rule_id: MB-002
+    name: BMI risk factor inclusion
+    description: >-
+      A BMI above the threshold should be listed in the summary
+      risk factors.
+    category: medical_business
+    target: summary
+    severity: warning
+    params:
+      vital_names:
+        - BMI
+        - Body Mass Index
+      threshold: 30.0
+
+  - rule_id: MB-003
+    name: Auto-critical condition detection
+    description: >-
+      Certain serious conditions should always be flagged as CRITICAL severity.
+    category: medical_business
+    target: condition
+    severity: warning
+    params:
+      condition_patterns:
+        - "(?i)\\bcancer\\b"
+        - "(?i)\\bmalignant\\b"
+        - "(?i)\\bHIV\\b"
+        - "(?i)\\bAIDS\\b"
+        - "(?i)\\bhepatitis\\s*c\\b"
+        - "(?i)\\bALS\\b"
+        - "(?i)\\bamyotrophic lateral sclerosis\\b"
+        - "(?i)\\bleukemia\\b"
+
+  - rule_id: MB-004
+    name: Concurrent controlled substances
+    description: >-
+      Multiple concurrent controlled substances should generate a red flag.
+    category: medical_business
+    target: medication
+    severity: warning
+    params:
+      controlled_patterns:
+        - "(?i)\\boxycodone\\b"
+        - "(?i)\\bhydrocodone\\b"
+        - "(?i)\\bfentanyl\\b"
+        - "(?i)\\bmorphine\\b"
+        - "(?i)\\bmethadone\\b"
+        - "(?i)\\balprazolam\\b"
+        - "(?i)\\bdiazepam\\b"
+        - "(?i)\\bclonazepam\\b"
+        - "(?i)\\blorazepam\\b"
+        - "(?i)\\badderall\\b"
+        - "(?i)\\bamphetamine\\b"
+      min_concurrent: 2
+
+  # ── Evidence Grounding ──────────────────────────────────────────────
+
+  - rule_id: EG-001
+    name: Critical findings require citations
+    description: >-
+      Findings with CRITICAL or SIGNIFICANT severity must have at
+      least one source citation.
+    category: evidence_grounding
+    target: finding
+    severity: error
+    params:
+      require_citation_for:
+        - CRITICAL
+        - SIGNIFICANT
+
+  - rule_id: EG-002
+    name: Citation page range validation
+    description: >-
+      Citation page numbers must be within the valid document range.
+    category: evidence_grounding
+    target: finding
+    severity: error
+    params: {}
+
+  - rule_id: EG-003
+    name: Uncited finding severity cap
+    description: >-
+      Findings without citations should not exceed the severity cap.
+    category: evidence_grounding
+    target: finding
+    severity: warning
+    params:
+      max_uncited_severity: MINOR
+
+  # ── Risk Classification ─────────────────────────────────────────────
+
+  - rule_id: RC-001
+    name: Valid risk tier
+    description: >-
+      The risk classification tier must be a recognized tier value.
+    category: risk_classification
+    target: risk_classification
+    severity: error
+    params:
+      allowed_tiers:
+        - "Preferred Plus"
+        - "Preferred"
+        - "Standard Plus"
+        - "Standard"
+        - "Substandard"
+        - "Table Rating"
+        - "Decline"
+        - "Postpone"
+        - "Incomplete"
+
+  - rule_id: RC-002
+    name: Critical finding vs preferred tier
+    description: >-
+      A summary with any CRITICAL finding cannot have a Preferred Plus
+      risk tier — the two are contradictory.
+    category: risk_classification
+    target: risk_classification
+    severity: error
+    params:
+      incompatible_tiers:
+        - "Preferred Plus"
+      trigger_severities:
+        - CRITICAL

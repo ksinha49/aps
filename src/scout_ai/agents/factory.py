@@ -30,6 +30,7 @@ def create_model(settings: AppSettings) -> Model:
             model_id=settings.llm.model,
             region_name=settings.llm.aws_region,
             temperature=settings.llm.temperature,
+            top_p=settings.llm.top_p,
         )
 
     if provider == "openai":
@@ -41,12 +42,17 @@ def create_model(settings: AppSettings) -> Model:
         if settings.llm.base_url:
             client_args["base_url"] = settings.llm.base_url
 
+        params: dict[str, Any] = {
+            "temperature": settings.llm.temperature,
+            "top_p": settings.llm.top_p,
+        }
+        if settings.llm.seed is not None:
+            params["seed"] = settings.llm.seed
+
         return OpenAIModel(
             client_args=client_args,
             model_id=settings.llm.model,
-            params={
-                "temperature": settings.llm.temperature,
-            },
+            params=params,
         )
 
     if provider == "ollama":
@@ -64,7 +70,9 @@ def create_model(settings: AppSettings) -> Model:
     if provider == "anthropic":
         from strands.models.litellm import LiteLLMModel
 
-        model_kwargs: dict[str, Any] = {}
+        model_kwargs: dict[str, Any] = {
+            "top_p": settings.llm.top_p,
+        }
         if settings.caching.enabled:
             model_kwargs["cache_control_injection_points"] = [
                 {"location": "message", "role": "system"}
@@ -77,7 +85,9 @@ def create_model(settings: AppSettings) -> Model:
     if provider == "litellm":
         from strands.models.litellm import LiteLLMModel
 
-        litellm_kwargs: dict[str, Any] = {}
+        litellm_kwargs: dict[str, Any] = {
+            "top_p": settings.llm.top_p,
+        }
         if settings.caching.enabled:
             litellm_kwargs["cache_control_injection_points"] = [
                 {"location": "message", "role": "system"}

@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from scout_ai.core.config import AppSettings
     from scout_ai.interfaces.chat import IChatProvider
     from scout_ai.interfaces.retrieval import IRetrievalProvider
+    from scout_ai.validation.engine import RulesEngine
+    from scout_ai.validation.models import ValidationReport
 
 log = logging.getLogger(__name__)
 
@@ -113,8 +115,9 @@ class ExtractionPipeline:
         pages: list[PageContent] | None = None,
         synthesize: bool = True,
         document_metadata: dict[str, Any] | None = None,
-    ) -> tuple[list[BatchExtractionResult], UnderwriterSummary | None]:
-        """Full pipeline: retrieve -> extract -> synthesize.
+        rules_engine: RulesEngine | None = None,
+    ) -> tuple[list[BatchExtractionResult], UnderwriterSummary | None, ValidationReport | None]:
+        """Full pipeline: retrieve -> extract -> synthesize -> validate.
 
         Args:
             index: Document index for retrieval.
@@ -122,13 +125,16 @@ class ExtractionPipeline:
             pages: Optional raw pages for per-page citation markers.
             synthesize: Whether to run the synthesis step.
             document_metadata: Optional metadata passed to synthesis.
+            rules_engine: Optional validation engine for post-synthesis checks.
 
         Returns:
-            Tuple of (extraction results, optional underwriter summary).
+            Tuple of (extraction results, optional underwriter summary,
+            optional validation report).
         """
         batch_results = await self.run(index, questions, pages=pages)
 
         summary: UnderwriterSummary | None = None
+        validation_report: ValidationReport | None = None
         if synthesize:
             from scout_ai.synthesis.pipeline import SynthesisPipeline
 
@@ -137,13 +143,13 @@ class ExtractionPipeline:
             client = getattr(self._chat, "_client", None)
             if client is None:
                 log.warning("Cannot synthesize: chat provider has no _client attribute")
-                return batch_results, None
+                return batch_results, None, None
 
             synth = SynthesisPipeline(client, cache_enabled=cache_enabled)
             metadata = document_metadata or {"doc_id": index.doc_id, "doc_name": index.doc_name}
             summary = await synth.synthesize(batch_results, metadata)
 
-        return batch_results, summary
+        return batch_results, summary, validation_report
 
 
 def build_cited_context(
@@ -202,6 +208,8 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
         llm_api_key=settings.llm.api_key,
         llm_model=settings.llm.model,
         llm_temperature=settings.llm.temperature,
+        llm_top_p=settings.llm.top_p,
+        llm_seed=settings.llm.seed,
         llm_timeout=settings.llm.timeout,
         llm_max_retries=settings.llm.max_retries,
         retrieval_max_concurrent=settings.retrieval.max_concurrent,

@@ -24,6 +24,8 @@ class ScoutSettings(BaseSettings):
     llm_api_key: str = "no-key"
     llm_model: str = "qwen3-14b"
     llm_temperature: float = 0.0
+    llm_top_p: float = 1.0
+    llm_seed: int | None = None
     llm_timeout: float = 120.0
     llm_max_retries: int = 5
 

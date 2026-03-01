@@ -28,6 +28,10 @@ class HookError(ScoutError):
     """Raised when a lifecycle hook encounters an error."""
 
 
+class ValidationError(ScoutError):
+    """Raised when post-LLM validation fails with ERROR-level issues."""
+
+
 __all__ = [
     "ScoutError",
     "IndexBuildError",
@@ -38,4 +42,5 @@ __all__ = [
     "CheckpointError",
     "PersistenceError",
     "HookError",
+    "ValidationError",
 ]

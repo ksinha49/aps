@@ -29,6 +29,8 @@ class LLMConfig(BaseSettings):
     api_key: str = "no-key"
     model: str = "qwen3-14b"
     temperature: float = 0.0
+    top_p: float = 1.0
+    seed: int | None = None
     timeout: float = 120.0
     max_retries: int = 5
     aws_region: str = "us-west-2"
@@ -186,6 +188,36 @@ class PDFFormattingConfig(BaseSettings):
     include_cover_page: bool = True
     company_name: str = ""
     confidential_watermark: bool = True
+    include_toc: bool = True
+    include_citation_refs: bool = True
+    section_numbering: bool = True
+    lab_table_flag_colors: bool = True
+    risk_badge_enabled: bool = True
+    red_flag_alerts: bool = True
+
+
+class RulesConfig(BaseSettings):
+    """Validation rules engine configuration.
+
+    Env vars use ``SCOUT_RULES_`` prefix::
+
+        export SCOUT_RULES_ENABLED=true
+        export SCOUT_RULES_BACKEND=file
+        export SCOUT_RULES_RULES_PATH=./rules/default_rules.yaml
+    """
+
+    model_config = {"env_prefix": "SCOUT_RULES_"}
+
+    enabled: bool = True
+    backend: Literal["file", "dynamodb", "memory"] = "file"
+    rules_path: Path = Path("./rules/default_rules.yaml")
+    table_name: str = "scout-rules"
+    aws_region: str = "us-east-1"
+    cache_ttl_seconds: float = 600.0
+    cache_max_size: int = 200
+    fail_on_error: bool = False
+    version: int | None = None
+    lob: str = "*"
 
 
 class AppSettings(BaseSettings):
@@ -205,3 +237,4 @@ class AppSettings(BaseSettings):
     prompt: PromptConfig = PromptConfig()
     caching: CachingConfig = CachingConfig()
     pdf: PDFFormattingConfig = PDFFormattingConfig()
+    rules: RulesConfig = RulesConfig()
