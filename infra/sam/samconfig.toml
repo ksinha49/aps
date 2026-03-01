@@ -1,0 +1,180 @@
+# SAM CLI configuration for Scout AI per-LOB deployments.
+#
+# Usage:
+#   sam deploy --config-env rp-dev
+#   sam deploy --config-env rp-prod
+#   sam deploy --config-env individual-dev
+#
+# Before deploying, set ContainerImageUri to your ECR image:
+#   sam deploy --config-env rp-dev --parameter-overrides ContainerImageUri=123456789012.dkr.ecr.us-east-1.amazonaws.com/scout-ai:latest
+
+version = 0.1
+
+# ---------------------------------------------------------------------------
+# Default (used by `sam deploy` with no --config-env)
+# ---------------------------------------------------------------------------
+[default.deploy.parameters]
+stack_name = "scout-rp-dev"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=rp",
+    "Domain=aps",
+    "Environment=dev",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=rp Environment=dev ManagedBy=SAM"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+# ---------------------------------------------------------------------------
+# rp-dev — Attending Physician Statement, dev
+# ---------------------------------------------------------------------------
+[rp-dev.deploy.parameters]
+stack_name = "scout-rp-dev"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam/rp-dev"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=rp",
+    "Domain=aps",
+    "Environment=dev",
+    "DesiredCount=1",
+    "TaskCpu=512",
+    "TaskMemory=1024",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=rp Environment=dev ManagedBy=SAM"
+
+# ---------------------------------------------------------------------------
+# rp-staging — Attending Physician Statement, staging
+# ---------------------------------------------------------------------------
+[rp-staging.deploy.parameters]
+stack_name = "scout-rp-staging"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam/rp-staging"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=rp",
+    "Domain=aps",
+    "Environment=staging",
+    "DesiredCount=2",
+    "TaskCpu=1024",
+    "TaskMemory=2048",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=rp Environment=staging ManagedBy=SAM"
+
+# ---------------------------------------------------------------------------
+# rp-prod — Attending Physician Statement, production
+# ---------------------------------------------------------------------------
+[rp-prod.deploy.parameters]
+stack_name = "scout-rp-prod"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam/rp-prod"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=rp",
+    "Domain=aps",
+    "Environment=prod",
+    "DesiredCount=2",
+    "TaskCpu=1024",
+    "TaskMemory=2048",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=rp Environment=prod ManagedBy=SAM"
+
+# ---------------------------------------------------------------------------
+# individual-dev — Individual LOB, dev
+# ---------------------------------------------------------------------------
+[individual-dev.deploy.parameters]
+stack_name = "scout-individual-dev"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam/individual-dev"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=individual",
+    "Domain=aps",
+    "Environment=dev",
+    "DesiredCount=1",
+    "TaskCpu=512",
+    "TaskMemory=1024",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=individual Environment=dev ManagedBy=SAM"
+
+# ---------------------------------------------------------------------------
+# individual-prod — Individual LOB, production
+# ---------------------------------------------------------------------------
+[individual-prod.deploy.parameters]
+stack_name = "scout-individual-prod"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam/individual-prod"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=individual",
+    "Domain=aps",
+    "Environment=prod",
+    "DesiredCount=2",
+    "TaskCpu=1024",
+    "TaskMemory=2048",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=individual Environment=prod ManagedBy=SAM"
+
+# ---------------------------------------------------------------------------
+# group-dev — Group LOB, dev
+# ---------------------------------------------------------------------------
+[group-dev.deploy.parameters]
+stack_name = "scout-group-dev"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam/group-dev"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=group",
+    "Domain=aps",
+    "Environment=dev",
+    "DesiredCount=1",
+    "TaskCpu=512",
+    "TaskMemory=1024",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=group Environment=dev ManagedBy=SAM"
+
+# ---------------------------------------------------------------------------
+# group-prod — Group LOB, production
+# ---------------------------------------------------------------------------
+[group-prod.deploy.parameters]
+stack_name = "scout-group-prod"
+resolve_s3 = true
+s3_prefix = "scout-ai-sam/group-prod"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = [
+    "LOB=group",
+    "Domain=aps",
+    "Environment=prod",
+    "DesiredCount=2",
+    "TaskCpu=1024",
+    "TaskMemory=2048",
+    "ContainerImageUri=PLACEHOLDER",
+]
+tags = "Project=scout-ai LOB=group Environment=prod ManagedBy=SAM"

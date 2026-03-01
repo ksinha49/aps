@@ -1,0 +1,834 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Scout AI per-LOB infrastructure stack.
+  Provisions VPC, S3, DynamoDB, SQS, Secrets Manager, ECS Fargate service,
+  and IAM roles — all parameterized by LOB, domain, and environment.
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  LOB:
+    Type: String
+    Default: rp
+    AllowedPattern: "^[a-z0-9-]+$"
+    Description: Line-of-business identifier (e.g. rp, individual, group).
+
+  Domain:
+    Type: String
+    Default: aps
+    AllowedPattern: "^[a-z0-9-]+$"
+    Description: Business domain (e.g. aps, claims, underwriting).
+
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment.
+
+  ContainerImageUri:
+    Type: String
+    Description: >
+      Full ECR image URI for the Scout AI container
+      (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/scout-ai:latest).
+
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: CIDR block for the VPC.
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: "10.0.1.0/24"
+    Description: CIDR for private subnet in AZ-a.
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: "10.0.2.0/24"
+    Description: CIDR for private subnet in AZ-b.
+
+  PublicSubnet1Cidr:
+    Type: String
+    Default: "10.0.101.0/24"
+    Description: CIDR for public subnet in AZ-a (NAT gateway).
+
+  DesiredCount:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 10
+    Description: Desired number of ECS tasks.
+
+  TaskCpu:
+    Type: String
+    Default: "1024"
+    AllowedValues: ["256", "512", "1024", "2048", "4096"]
+    Description: Fargate task CPU units.
+
+  TaskMemory:
+    Type: String
+    Default: "2048"
+    AllowedValues: ["512", "1024", "2048", "4096", "8192", "16384"]
+    Description: Fargate task memory in MiB.
+
+  ContainerPort:
+    Type: Number
+    Default: 8080
+    Description: Port the container listens on.
+
+# ---------------------------------------------------------------------------
+# Conditions
+# ---------------------------------------------------------------------------
+Conditions:
+  IsProd: !Equals [!Ref Environment, "prod"]
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # =========================================================================
+  # 1. VPC — 2 AZs, private subnets, 1 NAT gateway
+  # =========================================================================
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-vpc"
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-igw"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # --- Public subnet (for NAT gateway) ---
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-public-1a"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-public-rt"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  # --- NAT Gateway ---
+  NatEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-nat-eip"
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-nat"
+
+  # --- Private subnets ---
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-private-1a"
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-private-1b"
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-private-rt"
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # =========================================================================
+  # 2. S3 Bucket — SSE-KMS, enforced SSL, versioned, lifecycle
+  # =========================================================================
+  S3KmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "Scout AI S3 encryption key for ${LOB}-${Environment}"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableRootAccountAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  S3KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/scout-${LOB}-${Environment}-s3"
+      TargetKeyId: !Ref S3KmsKey
+
+  DocumentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "scout-${LOB}-${Environment}-documents-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: "aws:kms"
+              KMSMasterKeyID: !Ref S3KmsKey
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToIA
+            Status: Enabled
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 90
+            ExpirationInDays: 365
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  DocumentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocumentBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnforceSSLOnly
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt DocumentBucket.Arn
+              - !Sub "${DocumentBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  # =========================================================================
+  # 3. DynamoDB Tables — prompts + rules
+  # =========================================================================
+  PromptsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "scout-${LOB}-${Environment}-prompts"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  RulesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "scout-${LOB}-${Environment}-rules"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =========================================================================
+  # 4. SQS — Index queue with DLQ
+  # =========================================================================
+  IndexDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "scout-${LOB}-${Environment}-index-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  IndexQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "scout-${LOB}-${Environment}-index-queue"
+      VisibilityTimeout: 900  # 15 minutes
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt IndexDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =========================================================================
+  # 5. Secrets Manager — LLM API key
+  # =========================================================================
+  LLMApiKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "scout-${LOB}-${Environment}/llm-api-key"
+      Description: !Sub "LLM API key for Scout AI ${LOB} ${Environment}"
+      GenerateSecretString:
+        GenerateStringKey: api_key
+        SecretStringTemplate: '{"api_key": "REPLACE_ME"}'
+        ExcludePunctuation: true
+        PasswordLength: 64
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =========================================================================
+  # 6. ECS Cluster — with Container Insights
+  # =========================================================================
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "scout-${LOB}-${Environment}"
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =========================================================================
+  # 7. ECS Fargate Service — ALB, task definition, security groups
+  # =========================================================================
+
+  # --- CloudWatch Log Group ---
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/scout-${LOB}-${Environment}"
+      RetentionInDays: !If [IsProd, 90, 30]
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # --- Security Groups ---
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "ALB for scout-${LOB}-${Environment}"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-alb-sg"
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "ECS tasks for scout-${LOB}-${Environment}"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "scout-${LOB}-${Environment}-ecs-sg"
+
+  # --- Application Load Balancer (internal) ---
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "scout-${LOB}-${Environment}-alb"
+      Scheme: internal
+      Type: application
+      Subnets:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "scout-${LOB}-${Environment}-tg"
+      VpcId: !Ref VPC
+      Protocol: HTTP
+      Port: !Ref ContainerPort
+      TargetType: ip
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Project
+          Value: scout-ai
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  # --- IAM Roles ---
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "scout-${LOB}-${Environment}-exec-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      Policies:
+        - PolicyName: SecretsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "secretsmanager:GetSecretValue"
+                Resource: !Ref LLMApiKeySecret
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !Sub "${LogGroup.Arn}:*"
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # 8. IAM — Task role (least-privilege)
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "scout-${LOB}-${Environment}-task-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: S3ReadWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:ListBucket"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !GetAtt DocumentBucket.Arn
+                  - !Sub "${DocumentBucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - "kms:Decrypt"
+                  - "kms:GenerateDataKey"
+                Resource: !GetAtt S3KmsKey.Arn
+
+        - PolicyName: DynamoDBRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:BatchGetItem"
+                Resource:
+                  - !GetAtt PromptsTable.Arn
+                  - !Sub "${PromptsTable.Arn}/index/*"
+                  - !GetAtt RulesTable.Arn
+                  - !Sub "${RulesTable.Arn}/index/*"
+
+        - PolicyName: SQSSend
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "sqs:SendMessage"
+                  - "sqs:ReceiveMessage"
+                  - "sqs:DeleteMessage"
+                  - "sqs:GetQueueAttributes"
+                Resource: !GetAtt IndexQueue.Arn
+
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "secretsmanager:GetSecretValue"
+                Resource: !Ref LLMApiKeySecret
+
+        - PolicyName: BedrockInvoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "bedrock:InvokeModel"
+                  - "bedrock:InvokeModelWithResponseStream"
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/*"
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # --- ECS Task Definition ---
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "scout-${LOB}-${Environment}"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: scout-ai
+          Image: !Ref ContainerImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          Environment:
+            - Name: SCOUT_DOMAIN
+              Value: !Ref Domain
+            - Name: SCOUT_TENANT_ID
+              Value: !Sub "${LOB}-${Environment}"
+            - Name: SCOUT_LOB
+              Value: !Ref LOB
+            - Name: SCOUT_AWS_REGION
+              Value: !Ref "AWS::Region"
+            - Name: SCOUT_PERSISTENCE_BACKEND
+              Value: s3
+            - Name: SCOUT_PERSISTENCE_S3_BUCKET
+              Value: !Ref DocumentBucket
+            - Name: SCOUT_PERSISTENCE_S3_PREFIX
+              Value: !Sub "${Domain}/${LOB}"
+            - Name: SCOUT_PROMPT_BACKEND
+              Value: dynamodb
+            - Name: SCOUT_PROMPT_TABLE_NAME
+              Value: !Ref PromptsTable
+            - Name: SCOUT_RULES_BACKEND
+              Value: dynamodb
+            - Name: SCOUT_RULES_TABLE_NAME
+              Value: !Ref RulesTable
+            - Name: SCOUT_AUTH_ENABLED
+              Value: "true"
+            - Name: SCOUT_LLM_PROVIDER
+              Value: bedrock
+            - Name: SCOUT_LLM_AWS_REGION
+              Value: !Ref "AWS::Region"
+            - Name: SCOUT_OBSERVABILITY_ENABLE_TRACING
+              Value: "true"
+            - Name: SCOUT_OBSERVABILITY_SERVICE_NAME
+              Value: !Sub "scout-${LOB}-${Environment}"
+          Secrets:
+            - Name: SCOUT_LLM_API_KEY
+              ValueFrom: !Ref LLMApiKeySecret
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: ecs
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - !Sub "curl -f http://localhost:${ContainerPort}/health || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 10
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+  # --- ECS Service ---
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListener
+    Properties:
+      ServiceName: !Sub "scout-${LOB}-${Environment}"
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      LoadBalancers:
+        - ContainerName: scout-ai
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref ALBTargetGroup
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      Tags:
+        - Key: Project
+          Value: scout-ai
+        - Key: LOB
+          Value: !Ref LOB
+        - Key: Environment
+          Value: !Ref Environment
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  LoadBalancerDNS:
+    Description: Internal ALB DNS name for the Scout AI service.
+    Value: !GetAtt ALB.DNSName
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-alb-dns"
+
+  S3Bucket:
+    Description: S3 bucket for document storage.
+    Value: !Ref DocumentBucket
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-s3-bucket"
+
+  IndexQueueUrl:
+    Description: SQS queue URL for indexing requests.
+    Value: !Ref IndexQueue
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-index-queue-url"
+
+  IndexQueueArn:
+    Description: SQS queue ARN for indexing requests.
+    Value: !GetAtt IndexQueue.Arn
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-index-queue-arn"
+
+  IndexDLQUrl:
+    Description: SQS dead-letter queue URL.
+    Value: !Ref IndexDLQ
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-index-dlq-url"
+
+  PromptsTableName:
+    Description: DynamoDB prompts table name.
+    Value: !Ref PromptsTable
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-prompts-table"
+
+  RulesTableName:
+    Description: DynamoDB rules table name.
+    Value: !Ref RulesTable
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-rules-table"
+
+  ECSClusterName:
+    Description: ECS cluster name.
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-ecs-cluster"
+
+  ECSServiceName:
+    Description: ECS service name.
+    Value: !GetAtt ECSService.Name
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-ecs-service"
+
+  TaskRoleArn:
+    Description: IAM task role ARN.
+    Value: !GetAtt TaskRole.Arn
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-task-role-arn"
+
+  VpcId:
+    Description: VPC identifier.
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-vpc-id"
+
+  LLMApiKeySecretArn:
+    Description: Secrets Manager ARN for the LLM API key.
+    Value: !Ref LLMApiKeySecret
+    Export:
+      Name: !Sub "scout-${LOB}-${Environment}-llm-secret-arn"

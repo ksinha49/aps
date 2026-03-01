@@ -5,6 +5,7 @@ from __future__ import annotations
 from scout_ai.hooks.audit_hook import AuditHook
 from scout_ai.hooks.checkpoint_hook import CheckpointHook
 from scout_ai.hooks.circuit_breaker_hook import CircuitBreakerHook, CircuitState
+from scout_ai.hooks.circuit_breaker_store import IBreakerStore, MemoryBreakerStore
 from scout_ai.hooks.cost_hook import CostHook, UsageSummary, get_current_usage, reset_usage
 from scout_ai.hooks.dead_letter_hook import DeadLetterHook
 from scout_ai.hooks.logging_config import setup_logging
@@ -16,6 +17,8 @@ __all__ = [
     "CheckpointHook",
     "CircuitBreakerHook",
     "CircuitState",
+    "IBreakerStore",
+    "MemoryBreakerStore",
     "CostHook",
     "DeadLetterHook",
     "UsageSummary",

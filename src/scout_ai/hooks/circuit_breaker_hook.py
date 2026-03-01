@@ -7,6 +7,8 @@ import time
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from scout_ai.hooks.circuit_breaker_store import IBreakerStore, MemoryBreakerStore
+
 if TYPE_CHECKING:
     from strands.hooks.registry import HookRegistry
 
@@ -22,25 +24,32 @@ class CircuitState(str, Enum):
 class CircuitBreakerHook:
     """Strands HookProvider that implements circuit breaker pattern.
 
-    Tracks consecutive failures and transitions through CLOSED → OPEN → HALF_OPEN states.
+    Tracks consecutive failures and transitions through CLOSED -> OPEN -> HALF_OPEN states.
     When OPEN, raises an error before the model call to prevent wasted API calls.
+
+    Failure counts and timestamps are delegated to an ``IBreakerStore`` so that
+    state can optionally be shared across processes (e.g. via Redis or DynamoDB).
+    When no store is provided, an in-process ``MemoryBreakerStore`` is used.
     """
 
     def __init__(
         self,
         failure_threshold: int = 5,
         recovery_timeout_seconds: float = 60.0,
+        store: IBreakerStore | None = None,
+        breaker_key: str = "default",
     ) -> None:
         self._failure_threshold = failure_threshold
         self._recovery_timeout = recovery_timeout_seconds
-        self._failure_count = 0
-        self._last_failure_time: float = 0.0
+        self._store: IBreakerStore = store if store is not None else MemoryBreakerStore()
+        self._breaker_key = breaker_key
         self._state = CircuitState.CLOSED
 
     @property
     def state(self) -> CircuitState:
         if self._state == CircuitState.OPEN:
-            elapsed = time.monotonic() - self._last_failure_time
+            last_failure = self._store.get_last_failure_time(self._breaker_key)
+            elapsed = time.monotonic() - last_failure
             if elapsed >= self._recovery_timeout:
                 self._state = CircuitState.HALF_OPEN
                 log.info("Circuit breaker → HALF_OPEN (recovery timeout elapsed)")
@@ -55,28 +64,28 @@ class CircuitBreakerHook:
     def _before_model_call(self, event: Any) -> None:
         current = self.state
         if current == CircuitState.OPEN:
+            failure_count = self._store.get_failure_count(self._breaker_key)
             raise RuntimeError(
-                f"Circuit breaker OPEN — {self._failure_count} consecutive failures. "
+                f"Circuit breaker OPEN — {failure_count} consecutive failures. "
                 f"Retry after {self._recovery_timeout}s."
             )
 
     def _after_model_call(self, event: Any) -> None:
         error = getattr(event, "error", None)
         if error:
-            self._failure_count += 1
-            self._last_failure_time = time.monotonic()
-            if self._failure_count >= self._failure_threshold:
+            count = self._store.record_failure(self._breaker_key)
+            if count >= self._failure_threshold:
                 self._state = CircuitState.OPEN
                 log.warning(
-                    "Circuit breaker → OPEN after %d failures", self._failure_count
+                    "Circuit breaker → OPEN after %d failures", count
                 )
         else:
             if self._state == CircuitState.HALF_OPEN:
                 log.info("Circuit breaker → CLOSED (successful call in half-open)")
-            self._failure_count = 0
+            self._store.reset(self._breaker_key)
             self._state = CircuitState.CLOSED
 
     def reset(self) -> None:
         """Manually reset the circuit breaker to CLOSED."""
-        self._failure_count = 0
+        self._store.reset(self._breaker_key)
         self._state = CircuitState.CLOSED

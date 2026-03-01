@@ -157,6 +157,7 @@ class ObservabilityConfig(BaseSettings):
 
     enable_tracing: bool = False
     otlp_endpoint: str = "http://localhost:4317"
+    otlp_insecure: bool = True  # Set to False in production for TLS
     service_name: str = "scout-ai"
     log_level: str = "INFO"
 
@@ -253,6 +254,27 @@ class AuthConfig(BaseSettings):
     api_keys: list[str] = Field(default_factory=list)
 
 
+class StageModelConfig(BaseSettings):
+    """Per-pipeline-stage model overrides.
+
+    When a stage-specific model is set (non-empty), it takes precedence over
+    ``settings.llm.model`` for that stage.  Stages left empty fall back to
+    the global model.
+
+    Env vars use ``SCOUT_STAGE_`` prefix::
+
+        export SCOUT_STAGE_RETRIEVAL_MODEL=claude-3-haiku-20240307
+        export SCOUT_STAGE_EXTRACTION_MODEL=claude-3-5-sonnet-20241022
+    """
+
+    model_config = {"env_prefix": "SCOUT_STAGE_"}
+
+    indexing_model: str = ""
+    retrieval_model: str = ""
+    extraction_model: str = ""
+    synthesis_model: str = ""
+
+
 class AppSettings(BaseSettings):
     """Top-level application settings aggregating all sub-configs.
 
@@ -277,6 +299,7 @@ class AppSettings(BaseSettings):
         description="Default AWS region. Cascades to subsystems when their region is not set.",
     )
     llm: LLMConfig = LLMConfig()
+    stage_models: StageModelConfig = StageModelConfig()
     indexing: IndexingConfig = IndexingConfig()
     enrichment: EnrichmentConfig = EnrichmentConfig()
     retrieval: RetrievalConfig = RetrievalConfig()
@@ -289,3 +312,11 @@ class AppSettings(BaseSettings):
     pdf: PDFFormattingConfig = PDFFormattingConfig()
     rules: RulesConfig = RulesConfig()
     auth: AuthConfig = AuthConfig()
+    index_queue_url: str = Field(
+        default="",
+        description="SQS queue URL for async indexing. Set SCOUT_INDEX_QUEUE_URL to enable.",
+        validation_alias=AliasChoices(
+            "index_queue_url",
+            "SCOUT_INDEX_QUEUE_URL",
+        ),
+    )
