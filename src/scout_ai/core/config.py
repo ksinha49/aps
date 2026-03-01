@@ -230,6 +230,27 @@ class RulesConfig(BaseSettings):
     lob: str = "*"
 
 
+class AuthConfig(BaseSettings):
+    """API authentication configuration.
+
+    Env vars use ``SCOUT_AUTH_`` prefix::
+
+        export SCOUT_AUTH_ENABLED=true
+        export SCOUT_AUTH_JWKS_URL=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_xxx/.well-known/jwks.json
+    """
+
+    model_config = {"env_prefix": "SCOUT_AUTH_"}
+
+    enabled: bool = False
+    jwks_url: str = ""
+    issuer: str = ""
+    audience: str = "scout-ai"
+    algorithm: str = "RS256"
+    tenant_claim: str = "custom:tenant_id"
+    api_key_header: str = "X-API-Key"
+    api_keys: list[str] = Field(default_factory=list)
+
+
 class AppSettings(BaseSettings):
     """Top-level application settings aggregating all sub-configs.
 
@@ -253,3 +274,4 @@ class AppSettings(BaseSettings):
     caching: CachingConfig = CachingConfig()
     pdf: PDFFormattingConfig = PDFFormattingConfig()
     rules: RulesConfig = RulesConfig()
+    auth: AuthConfig = AuthConfig()

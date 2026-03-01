@@ -5,8 +5,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from scout_ai.api.auth import require_auth
 from scout_ai.api.routes import extract, health, index, retrieve
 from scout_ai.core.config import AppSettings
 from scout_ai.hooks import setup_logging, setup_tracing
@@ -45,6 +46,6 @@ app = FastAPI(
 )
 
 app.include_router(health.router)
-app.include_router(index.router, prefix="/api")
-app.include_router(retrieve.router, prefix="/api")
-app.include_router(extract.router, prefix="/api")
+app.include_router(index.router, prefix="/api", dependencies=[Depends(require_auth)])
+app.include_router(retrieve.router, prefix="/api", dependencies=[Depends(require_auth)])
+app.include_router(extract.router, prefix="/api", dependencies=[Depends(require_auth)])
