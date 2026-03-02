@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scout_ai.interfaces.chat import IChatProvider
 from scout_ai.interfaces.retrieval import IRetrievalProvider
@@ -16,6 +16,10 @@ from scout_ai.models import (
     RetrievalResult,
 )
 
+if TYPE_CHECKING:
+    from scout_ai.context.prefix.stabilizer import PrefixStabilizer
+    from scout_ai.context.protocols import IContextCompressor
+
 log = logging.getLogger(__name__)
 
 
@@ -26,9 +30,16 @@ class ExtractionService:
         self,
         retrieval_provider: IRetrievalProvider,
         chat_provider: IChatProvider,
+        *,
+        prefix_stabilizer: PrefixStabilizer | None = None,
+        compressor: IContextCompressor | None = None,
+        compression_target_ratio: float = 0.5,
     ) -> None:
         self._retrieval = retrieval_provider
         self._chat = chat_provider
+        self._prefix_stabilizer = prefix_stabilizer
+        self._compressor = compressor
+        self._compression_target_ratio = compression_target_ratio
 
     async def extract(
         self,
@@ -70,11 +81,21 @@ class ExtractionService:
                 )
                 continue
 
-            context = self._build_cited_context(retrieval.retrieved_nodes, page_map)
+            nodes = retrieval.retrieved_nodes
+            if self._prefix_stabilizer is not None:
+                nodes = self._prefix_stabilizer.stabilize(nodes)
+
+            context = self._build_cited_context(nodes, page_map)
 
             if not context:
                 results.append(BatchExtractionResult(category=category_str, retrieval=retrieval))
                 continue
+
+            if self._compressor is not None:
+                compressed = self._compressor.compress(
+                    context, target_ratio=self._compression_target_ratio,
+                )
+                context = compressed.text
 
             extractions = await self._chat.extract_answers(cat_questions, context)
             results.append(

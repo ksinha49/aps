@@ -70,7 +70,10 @@ class ScoutIndexer(IIngestionProvider):
         self._settings = settings
         self._client = client
         self._domain = domain
-        self._tc = TokenCounter(method=settings.tokenizer_method, model=settings.tokenizer_model)
+        self._tc = TokenCounter(
+            method=settings.tokenizer_method,
+            model=settings.tokenizer_model,
+        )
         self._tree_builder = TreeBuilder(self._tc)
         if classifier is not None:
             self._classifier = classifier

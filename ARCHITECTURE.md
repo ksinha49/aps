@@ -160,6 +160,7 @@ The pluggable inference layer follows the same Protocol pattern as pluggable per
 |-------|----------|----------|----------|
 | **Inference** | `IInferenceBackend` | `RealTimeBackend` | Bedrock Batch, IDP, SageMaker |
 | **Persistence** | `IPersistenceBackend` | File, S3, Memory | DynamoDB, Redis, etc. |
+| **Context** | `IContextCompressor`, `IContextCache` | NoOp, Entropic, Memory | LLMLingua, Redis, S3 cache |
 | **Domain** | `DomainConfig` | APS | Workers' Comp, Disability, Dental |
 | **Formatting** | `IPDFFormatter` | APS PDF | Custom PDF/JSON/HTML per domain |
 
@@ -199,6 +200,8 @@ The inference layer is **orthogonal** to every other layer in Scout AI:
 
 ```
 Inference (how we call the LLM)     ← pluggable
+    ×
+Context (how we optimize prompts)   ← pluggable
     ×
 Domain (what we extract)            ← pluggable
     ×
@@ -363,7 +366,7 @@ No code changes between any of these environments. Same Docker image, different 
 
 **Total new code**: ~535 lines (implementation + tests)
 **Existing code modified**: ~63 lines changed across 3 files
-**Test regressions**: 0 (416/416 pass)
+**Test regressions**: 0 (613/613 pass)
 
 ---
 

@@ -55,6 +55,25 @@ class LLMClient:
         messages.append({"role": "user", "content": prompt})
         return messages
 
+    def _build_layered_messages(
+        self,
+        system_prompt: str,
+        document_context: str,
+        query: str,
+        *,
+        max_breakpoints: int = 4,
+    ) -> list[dict[str, Any]]:
+        """Build messages with multi-layer cache breakpoints.
+
+        Uses ``ContextLayerBuilder`` to construct a message hierarchy with
+        ``cache_control`` markers at layer boundaries, enabling multi-layer
+        Anthropic prompt caching.
+        """
+        from scout_ai.context.factoring import ContextLayerBuilder
+
+        builder = ContextLayerBuilder(max_breakpoints=max_breakpoints)
+        return builder.build_messages(system_prompt, document_context, query)
+
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
         """Classify whether an LLM API error should be retried.

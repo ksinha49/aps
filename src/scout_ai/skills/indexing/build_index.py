@@ -62,7 +62,12 @@ def build_index(  # type: ignore[assignment]
 
     # Populate token counts
     tok_cfg = settings.tokenizer if settings else TokenizerConfig()
-    tc = TokenCounter(method=tok_cfg.method, model=tok_cfg.model)
+    tc = TokenCounter(
+        method=tok_cfg.method,
+        model=tok_cfg.model,
+        char_to_token_ratio=tok_cfg.char_to_token_ratio,
+        fallback_encoding=tok_cfg.fallback_encoding,
+    )
     for p in pages:
         if p.token_count is None:
             p.token_count = tc.count(p.text)
@@ -118,7 +123,12 @@ def assemble_index(
         Complete DocumentIndex ready for persistence.
     """
     tok_cfg = settings.tokenizer if settings else TokenizerConfig()
-    tc = TokenCounter(method=tok_cfg.method, model=tok_cfg.model)
+    tc = TokenCounter(
+        method=tok_cfg.method,
+        model=tok_cfg.model,
+        char_to_token_ratio=tok_cfg.char_to_token_ratio,
+        fallback_encoding=tok_cfg.fallback_encoding,
+    )
     builder = TreeBuilder(tc)
 
     # Build tree from validated TOC items

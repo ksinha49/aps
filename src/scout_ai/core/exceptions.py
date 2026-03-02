@@ -35,6 +35,14 @@ class ValidationError(ScoutError):
     """Raised when post-LLM validation fails with ERROR-level issues."""
 
 
+class CompressionError(ScoutError):
+    """Raised when context compression fails."""
+
+
+class ContextCacheError(ScoutError):
+    """Raised when context cache operations fail."""
+
+
 __all__ = [
     "ScoutError",
     "IndexBuildError",
@@ -49,4 +57,6 @@ __all__ = [
     "PersistenceError",
     "HookError",
     "ValidationError",
+    "CompressionError",
+    "ContextCacheError",
 ]

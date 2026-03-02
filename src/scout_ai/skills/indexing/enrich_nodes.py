@@ -35,12 +35,12 @@ def enrich_nodes(  # type: ignore[assignment]
     Returns:
         JSON with enrichment instructions and nodes to process.
     """
+    from scout_ai.core.config import IndexingConfig
+
     settings = tool_context.invocation_state.get("settings")  # type: ignore[union-attr]
-    summary_max_chars = 4000
-    classification_max_chars = 500
-    if settings:
-        summary_max_chars = settings.indexing.summary_max_chars
-        classification_max_chars = settings.indexing.classification_max_chars
+    idx_cfg = settings.indexing if settings else IndexingConfig()
+    summary_max_chars = idx_cfg.summary_max_chars
+    classification_max_chars = idx_cfg.classification_max_chars
 
     nodes_for_summary = []
     nodes_for_classification = []

@@ -58,6 +58,14 @@ from scout_ai.services.index_store import IndexStore
 from scout_ai.services.ingestion_service import IngestionService
 
 __all__ = [
+    # Context engineering
+    "IContextCompressor",
+    "IContextCache",
+    "CompressedContext",
+    "ContextLayer",
+    "CacheEntry",
+    "create_compressor",
+    "create_context_cache",
     # Legacy
     "ScoutSettings",
     "PageContent",
@@ -93,6 +101,17 @@ __all__ = [
 # Backward compat: ``from scout_ai import MedicalSectionType`` still works
 _COMPAT_NAMES = {"MedicalSectionType", "ExtractionCategory"}
 
+# Context engineering (lazy to avoid import cycles)
+_CONTEXT_NAMES = {
+    "IContextCompressor",
+    "IContextCache",
+    "CompressedContext",
+    "ContextLayer",
+    "CacheEntry",
+    "create_compressor",
+    "create_context_cache",
+}
+
 
 def __getattr__(name: str) -> Any:
     if name in _COMPAT_NAMES:
@@ -105,4 +124,8 @@ def __getattr__(name: str) -> Any:
 
         _map = {"MedicalSectionType": _MST, "ExtractionCategory": _EC}
         return _map[name]
+    if name in _CONTEXT_NAMES:
+        import scout_ai.context as _ctx
+
+        return getattr(_ctx, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

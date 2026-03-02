@@ -1,5 +1,7 @@
 """Container healthcheck script — returns exit 0 if API is healthy."""
 
+from __future__ import annotations
+
 import os
 import sys
 import urllib.request

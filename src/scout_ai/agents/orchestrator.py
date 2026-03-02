@@ -25,6 +25,8 @@ from scout_ai.models import (
 )
 
 if TYPE_CHECKING:
+    from scout_ai.context.prefix.stabilizer import PrefixStabilizer
+    from scout_ai.context.protocols import IContextCache, IContextCompressor
     from scout_ai.core.config import AppSettings
     from scout_ai.domains.aps.validation.engine import RulesEngine
     from scout_ai.interfaces.chat import IChatProvider
@@ -46,10 +48,19 @@ class ExtractionPipeline:
         retrieval_provider: IRetrievalProvider,
         chat_provider: IChatProvider,
         domain: str = "aps",
+        *,
+        prefix_stabilizer: PrefixStabilizer | None = None,
+        compressor: IContextCompressor | None = None,
+        context_cache: IContextCache | None = None,
+        compression_target_ratio: float = 0.5,
     ) -> None:
         self._retrieval = retrieval_provider
         self._chat = chat_provider
         self._domain = domain
+        self._prefix_stabilizer = prefix_stabilizer
+        self._compressor = compressor
+        self._context_cache = context_cache
+        self._compression_target_ratio = compression_target_ratio
 
     async def run(
         self,
@@ -102,10 +113,20 @@ class ExtractionPipeline:
                 )
                 continue
 
-            context = build_cited_context(retrieval.retrieved_nodes, page_map)
+            nodes = retrieval.retrieved_nodes
+            if self._prefix_stabilizer is not None:
+                nodes = self._prefix_stabilizer.stabilize(nodes)
+
+            context = build_cited_context(nodes, page_map)
             if not context:
                 results.append(BatchExtractionResult(category=category_str, retrieval=retrieval))
                 continue
+
+            if self._compressor is not None:
+                compressed = self._compressor.compress(
+                    context, target_ratio=self._compression_target_ratio,
+                )
+                context = compressed.text
 
             try:
                 with track_stage(f"extraction:{category_str}") as stage:
@@ -277,4 +298,34 @@ def create_extraction_pipeline(settings: AppSettings) -> ExtractionPipeline:
     )
     chat = ScoutChat(legacy_settings, client, domain=settings.domain)
 
-    return ExtractionPipeline(retrieval, chat, domain=settings.domain)
+    # Wire context engineering modules when enabled
+    prefix_stabilizer = None
+    compressor = None
+    context_cache = None
+    compression_ratio = 0.5
+
+    if settings.prefix.enabled:
+        from scout_ai.context.prefix import PrefixStabilizer
+
+        prefix_stabilizer = PrefixStabilizer(strategy=settings.prefix.sort_strategy)
+
+    if settings.compression.enabled:
+        from scout_ai.context import create_compressor
+
+        compressor = create_compressor(settings)
+        compression_ratio = settings.compression.target_ratio
+
+    if settings.context_cache.enabled:
+        from scout_ai.context import create_context_cache
+
+        context_cache = create_context_cache(settings)
+
+    return ExtractionPipeline(
+        retrieval,
+        chat,
+        domain=settings.domain,
+        prefix_stabilizer=prefix_stabilizer,
+        compressor=compressor,
+        context_cache=context_cache,
+        compression_target_ratio=compression_ratio,
+    )

@@ -49,18 +49,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
 
-_api_config = APIConfig()
+def _create_app() -> FastAPI:
+    """Create the FastAPI application with env-driven metadata."""
+    api_config = APIConfig()
+    application = FastAPI(
+        title=api_config.title,
+        description=api_config.description,
+        version=_get_version(),
+        lifespan=lifespan,
+    )
+    application.include_router(health.router)
+    application.include_router(index.router, prefix="/api", dependencies=[Depends(require_auth)])
+    application.include_router(retrieve.router, prefix="/api", dependencies=[Depends(require_auth)])
+    application.include_router(extract.router, prefix="/api", dependencies=[Depends(require_auth)])
+    application.include_router(index_async.router, prefix="/api", dependencies=[Depends(require_auth)])
+    application.include_router(feedback.router, prefix="/api", dependencies=[Depends(require_auth)])
+    return application
 
-app = FastAPI(
-    title=_api_config.title,
-    description=_api_config.description,
-    version=_get_version(),
-    lifespan=lifespan,
-)
 
-app.include_router(health.router)
-app.include_router(index.router, prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(retrieve.router, prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(extract.router, prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(index_async.router, prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(feedback.router, prefix="/api", dependencies=[Depends(require_auth)])
+app = _create_app()

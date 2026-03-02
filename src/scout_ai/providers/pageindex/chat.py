@@ -13,15 +13,14 @@ import logging
 from typing import Any
 
 from scout_ai.config import ScoutSettings
-from scout_ai.core.config import ExtractionConfig
 from scout_ai.interfaces.chat import IChatProvider
 from scout_ai.models import Citation, ExtractionQuestion, ExtractionResult
 from scout_ai.providers.pageindex.client import LLMClient
 
 log = logging.getLogger(__name__)
 
-# Reads SCOUT_EXTRACTION_TIER1_BATCH_SIZE env var; defaults to 20
-TIER1_BATCH_SIZE: int = ExtractionConfig().tier1_batch_size
+# Default batch size for tier-1 extraction; overridden per-instance via settings
+TIER1_BATCH_SIZE: int = 20
 
 
 class ScoutChat(IChatProvider):
@@ -37,6 +36,9 @@ class ScoutChat(IChatProvider):
         individual_extraction_prompt: str | None = None,
         system_template: str | None = None,
         domain: str = "aps",
+        tier1_batch_size: int | None = None,
+        compressor: object | None = None,
+        max_context_chars: int = 8000,
     ) -> None:
         self._settings = settings
         self._client = client
@@ -44,6 +46,9 @@ class ScoutChat(IChatProvider):
         self._batch_extraction_prompt = batch_extraction_prompt or ""
         self._individual_extraction_prompt = individual_extraction_prompt or ""
         self._domain = domain
+        self._tier1_batch_size = tier1_batch_size or TIER1_BATCH_SIZE
+        self._compressor = compressor
+        self._max_context_chars = max_context_chars
 
         # Lazy-load system template from registry if not provided
         if not system_template:
@@ -78,12 +83,13 @@ class ScoutChat(IChatProvider):
         # Build cacheable system prompt with document context
         system_prompt: str | None = None
         if self._cache_enabled:
-            system_prompt = self._system_template.format(context=context[:8000])
+            ctx = self._prepare_context(context)
+            system_prompt = self._system_template.format(context=ctx)
 
         results: list[ExtractionResult] = []
 
         # Tier 1: batch extraction
-        for i in range(0, len(tier1), TIER1_BATCH_SIZE):
+        for i in range(0, len(tier1), self._tier1_batch_size):
             batch = tier1[i : i + TIER1_BATCH_SIZE]
             batch_results = await self._extract_batch(
                 batch,
@@ -199,6 +205,17 @@ Provide a detailed answer based only on the provided context."""
             ]
         return []
 
+    def _prepare_context(self, context: str) -> str:
+        """Apply compression or hard-truncation to context text.
+
+        When a compressor is configured, it replaces the legacy ``[:8000]``
+        truncation with intelligent compression.
+        """
+        if self._compressor is not None:
+            compressed = self._compressor.compress(context, target_ratio=0.5)  # type: ignore[union-attr]
+            return compressed.text
+        return context[: self._max_context_chars]
+
     # ── Tier 1: Batch extraction ─────────────────────────────────────
 
     @staticmethod
@@ -245,7 +262,7 @@ Provide a detailed answer based only on the provided context."""
 
                 self._batch_extraction_prompt = get_prompt(self._domain, "extraction", "BATCH_EXTRACTION_PROMPT")
             prompt = self._batch_extraction_prompt.format(
-                context=context[:8000],
+                context=self._prepare_context(context),
                 questions=questions_text,
             )
 
@@ -316,7 +333,7 @@ Provide a detailed answer based only on the provided context."""
                     self._domain, "extraction", "INDIVIDUAL_EXTRACTION_PROMPT",
                 )
             prompt = self._individual_extraction_prompt.format(
-                context=context[:8000],
+                context=self._prepare_context(context),
                 question=formatted_q,
             )
 

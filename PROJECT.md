@@ -164,6 +164,15 @@ src/scout_ai/
 ├── formatters/                   # Generic formatter interface
 │   └── pdf_formatter.py          # Base PDFFormatter class
 │
+├── context/                      # Context engineering optimizations (all disabled by default)
+│   ├── __init__.py               # Public API: create_compressor(), create_context_cache()
+│   ├── protocols.py              # IContextCompressor, IContextCache (runtime_checkable)
+│   ├── models.py                 # CompressedContext, ContextLayer, CacheEntry
+│   ├── compression/              # Statistical compression (noop, entropic, llmlingua)
+│   ├── factoring/                # Multi-breakpoint prompt cache hierarchy
+│   ├── prefix/                   # Deterministic context ordering for cache hits
+│   └── cache/                    # Extraction result caching (memory, s3, redis)
+│
 ├── inference/                    # Pluggable inference backends
 │   ├── __init__.py               # Public API exports
 │   ├── protocols.py              # IInferenceBackend Protocol + data models
@@ -248,6 +257,15 @@ The factory uses the same dotted-path import pattern as the Domain Registry. Ext
 ### 7. Legacy Backward Compatibility
 All original imports from `scout_ai.*` still work. Old `aps/` and `providers/pageindex/medical_classifier.py` files are thin re-export shims.
 
+### 8. Context Engineering (Opt-In Optimizations)
+Four independent modules in `context/` reduce LLM cost and latency — all disabled by default, enabled via `SCOUT_*` env vars:
+- **Prefix Stabilization**: Deterministic node ordering before context construction, maximizing prompt cache hits
+- **Context Compression**: Sentence-level entropy filtering replaces hard `[:8000]` truncation
+- **Context Factoring**: Multi-breakpoint prompt cache hierarchy (up to 4 Anthropic breakpoints)
+- **Extraction Result Cache**: Skip LLM entirely on cache hit (memory, S3, or Redis backends)
+
+Each module follows the `@runtime_checkable` Protocol + factory + pydantic-settings config pattern. See `CONTEXT_ENGINEERING.md` for full reference.
+
 ---
 
 ## Underwriting Template System
@@ -321,6 +339,10 @@ All settings use pydantic-settings with environment variable prefixes:
 | `SCOUT_TOKENIZER_` | `TokenizerConfig` | Counter method |
 | `SCOUT_OBSERVABILITY_` | `ObservabilityConfig` | Tracing, OTLP endpoint, log level |
 | `SCOUT_PDF_` | `PDFFormattingConfig` | PDF output formatting |
+| `SCOUT_COMPRESSION_` | `CompressionConfig` | Context compression (method, target ratio) |
+| `SCOUT_PREFIX_` | `PrefixConfig` | Prefix stabilization (sort strategy) |
+| `SCOUT_CONTEXT_CACHE_` | `ContextCacheConfig` | Extraction result caching (backend, TTL) |
+| `SCOUT_CACHING_` | `CachingConfig` (extended) | Multi-breakpoint prompt cache hierarchy |
 
 ---
 
@@ -370,10 +392,10 @@ python3 /tmp/run_underwriting_demo.py
 
 ## Test Infrastructure
 
-- **416 tests** across unit and integration suites
+- **613 tests** across unit and integration suites
 - All async tests use `asyncio_mode = "auto"`
 - Integration tests mock the OpenAI API at the HTTP level using `respx`
-- Test fakes: `FakeStrandsModel` (canned responses), `FakePersistenceBackend` (dict-backed), `FakeInferenceBackend` (canned inference responses + call recording)
+- Test fakes: `FakeStrandsModel` (canned responses), `FakePersistenceBackend` (dict-backed), `FakeInferenceBackend` (canned inference responses + call recording), `FakeContextCache` (dict-backed IContextCache)
 - PDF tests use `pytest.importorskip("reportlab")` for optional dependency
 
 ---

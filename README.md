@@ -36,6 +36,7 @@ Ameritas processes thousands of structured and semi-structured documents across 
 | Observability | Audit logging, token cost tracking, OpenTelemetry | Direct reuse |
 | Resilience | Circuit breaker, dead letter queue, checkpointing | Direct reuse |
 | Persistence | File, S3, in-memory backends via Protocol | Direct reuse |
+| Context engineering | Prefix stabilization, compression, factoring, result caching | Direct reuse |
 | PDF generation | reportlab-based with configurable styles | Extend per domain |
 | Synthesis pipeline | Deterministic post-processing framework | Extend per domain |
 | Question templates | JSON-driven, category-grouped | **New per domain** |
@@ -198,7 +199,7 @@ Each of these follows the same pattern: define questions, describe categories, w
 git clone https://github.com/ksinha49/aps.git my-domain-project
 cd my-domain-project
 pip install -e ".[dev]"
-pytest tests/ -v  # Verify 416+ tests pass
+pytest tests/ -v  # Verify 613+ tests pass
 ```
 
 ### Step 2: Create Your Domain Package
@@ -317,6 +318,9 @@ All settings use pydantic-settings with environment variable prefixes. No config
 | `SCOUT_PERSISTENCE_` | Backend type, S3 bucket | `SCOUT_PERSISTENCE_BACKEND=s3` |
 | `SCOUT_OBSERVABILITY_` | Tracing, log level | `SCOUT_OBSERVABILITY_OTLP_ENDPOINT=...` |
 | `SCOUT_PDF_` | Page size, fonts, watermark | `SCOUT_PDF_PAGE_SIZE=letter` |
+| `SCOUT_COMPRESSION_` | Context compression | `SCOUT_COMPRESSION_METHOD=entropic` |
+| `SCOUT_PREFIX_` | Prefix stabilization | `SCOUT_PREFIX_SORT_STRATEGY=page_number` |
+| `SCOUT_CONTEXT_CACHE_` | Extraction result caching | `SCOUT_CONTEXT_CACHE_BACKEND=memory` |
 
 ---
 
@@ -365,6 +369,7 @@ Python 3.10+ required.
 │   ├── domains/            # Domain modules (auto-discovered)
 │   │   ├── aps/            # APS domain (production-ready)
 │   │   └── workers_comp/   # Workers' comp (scaffold)
+│   ├── context/            # Context engineering (compression, caching, prefix, factoring)
 │   ├── inference/          # Pluggable inference backends (Protocol-based)
 │   ├── persistence/        # Storage backends (Protocol-based)
 │   ├── providers/          # Legacy provider implementations
@@ -374,7 +379,7 @@ Python 3.10+ required.
 ├── tests/
 │   ├── unit/               # 300+ unit tests
 │   ├── integration/        # Mocked LLM integration tests
-│   └── fakes/              # FakeStrandsModel, FakePersistenceBackend, FakeInferenceBackend
+│   └── fakes/              # FakeStrandsModel, FakePersistenceBackend, FakeInferenceBackend, FakeContextCache
 ├── deploy/                 # ECS, EKS, RHEL deployment configs
 ├── docker/                 # Production + dev Dockerfiles
 ├── PROJECT.md              # Detailed architecture documentation

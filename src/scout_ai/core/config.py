@@ -52,10 +52,10 @@ class IndexingConfig(BaseSettings):
     max_tokens_per_node: int = 20_000
     max_recursion_depth: int = 10
     max_group_tokens: int = 20_000
-    summary_max_chars: int = 4000
-    classification_max_chars: int = 500
-    toc_continuation_attempts: int = 3
-    min_heuristic_sections: int = 3
+    summary_max_chars: int = Field(default=4000, ge=1)
+    classification_max_chars: int = Field(default=500, ge=1)
+    toc_continuation_attempts: int = Field(default=3, ge=0)
+    min_heuristic_sections: int = Field(default=3, ge=1)
 
 
 class EnrichmentConfig(BaseSettings):
@@ -128,7 +128,7 @@ class TokenizerConfig(BaseSettings):
 
     method: Literal["approximate", "tiktoken", "transformers"] = "approximate"
     model: str = "gpt-4o"
-    char_to_token_ratio: int = 4
+    char_to_token_ratio: int = Field(default=4, ge=1)
     fallback_encoding: str = "cl100k_base"
 
 
@@ -184,6 +184,61 @@ class CachingConfig(BaseSettings):
     min_cacheable_tokens: int = 1024
     keepalive_interval_seconds: float = 240.0
     ttl_type: Literal["ephemeral", "long"] = "ephemeral"
+    max_breakpoints: int = Field(default=4, ge=1, le=4)
+    cache_document_layer: bool = True
+    cache_tool_layer: bool = False
+
+
+class CompressionConfig(BaseSettings):
+    """Context compression configuration.
+
+    Env vars use ``SCOUT_COMPRESSION_`` prefix::
+
+        export SCOUT_COMPRESSION_ENABLED=true
+        export SCOUT_COMPRESSION_METHOD=entropic
+    """
+
+    model_config = {"env_prefix": "SCOUT_COMPRESSION_"}
+
+    enabled: bool = False
+    method: Literal["noop", "entropic", "llmlingua"] = "noop"
+    target_ratio: float = Field(default=0.5, gt=0.0, le=1.0)
+    min_tokens_for_compression: int = Field(default=500, ge=0)
+
+
+class PrefixConfig(BaseSettings):
+    """Prefix stabilization configuration for deterministic context ordering.
+
+    Env vars use ``SCOUT_PREFIX_`` prefix::
+
+        export SCOUT_PREFIX_ENABLED=true
+        export SCOUT_PREFIX_SORT_STRATEGY=page_number
+    """
+
+    model_config = {"env_prefix": "SCOUT_PREFIX_"}
+
+    enabled: bool = False
+    sort_strategy: Literal["page_number", "section_path", "doc_id_page"] = "page_number"
+    deterministic_json: bool = True
+
+
+class ContextCacheConfig(BaseSettings):
+    """Extraction result caching configuration.
+
+    Env vars use ``SCOUT_CONTEXT_CACHE_`` prefix::
+
+        export SCOUT_CONTEXT_CACHE_ENABLED=true
+        export SCOUT_CONTEXT_CACHE_BACKEND=memory
+    """
+
+    model_config = {"env_prefix": "SCOUT_CONTEXT_CACHE_"}
+
+    enabled: bool = False
+    backend: Literal["memory", "s3", "redis"] = "memory"
+    ttl_seconds: int = Field(default=3600, ge=0)
+    max_entries: int = Field(default=1000, ge=1)
+    l1_max_size: int = Field(default=100, ge=1)
+    redis_url: str = ""
 
 
 class PDFFormattingConfig(BaseSettings):
@@ -270,8 +325,8 @@ class ResilienceConfig(BaseSettings):
 
     model_config = {"env_prefix": "SCOUT_RESILIENCE_"}
 
-    circuit_breaker_failure_threshold: int = 5
-    circuit_breaker_recovery_timeout: float = 60.0
+    circuit_breaker_failure_threshold: int = Field(default=5, ge=1)
+    circuit_breaker_recovery_timeout: float = Field(default=60.0, gt=0)
     checkpoint_key_prefix: str = "_checkpoint/"
     dead_letter_key_prefix: str = "_dead_letter/"
 
@@ -289,7 +344,7 @@ class APIConfig(BaseSettings):
 
     title: str = "Scout AI by Ameritas"
     description: str = "Vectorless RAG system with hierarchical tree indexes"
-    port: int = 8080
+    port: int = Field(default=8080, ge=1, le=65535)
 
 
 class StageModelConfig(BaseSettings):
@@ -347,6 +402,9 @@ class AppSettings(BaseSettings):
     observability: ObservabilityConfig = ObservabilityConfig()
     prompt: PromptConfig = PromptConfig()
     caching: CachingConfig = CachingConfig()
+    compression: CompressionConfig = CompressionConfig()
+    prefix: PrefixConfig = PrefixConfig()
+    context_cache: ContextCacheConfig = ContextCacheConfig()
     pdf: PDFFormattingConfig = PDFFormattingConfig()
     rules: RulesConfig = RulesConfig()
     auth: AuthConfig = AuthConfig()

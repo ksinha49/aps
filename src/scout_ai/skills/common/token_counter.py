@@ -24,6 +24,11 @@ def count_tokens(text: str, tool_context: ToolContext) -> str:
     settings = tool_context.invocation_state.get("settings")
     tok_cfg = settings.tokenizer if settings else TokenizerConfig()
 
-    tc = TokenCounter(method=tok_cfg.method, model=tok_cfg.model)
+    tc = TokenCounter(
+        method=tok_cfg.method,
+        model=tok_cfg.model,
+        char_to_token_ratio=tok_cfg.char_to_token_ratio,
+        fallback_encoding=tok_cfg.fallback_encoding,
+    )
     count = tc.count(text)
     return json.dumps({"token_count": count})

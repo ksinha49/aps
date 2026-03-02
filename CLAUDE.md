@@ -117,6 +117,14 @@ src/scout_ai/
 │       ├── section_patterns.py   # Regex patterns for section detection
 │       └── classifier.py         # MedicalSectionClassifier (regex-first, LLM fallback)
 │
+├── context/                      # Context engineering optimizations (all disabled by default)
+│   ├── protocols.py              # IContextCompressor, IContextCache (runtime_checkable)
+│   ├── models.py                 # CompressedContext, ContextLayer, CacheEntry
+│   ├── compression/              # Statistical context compression (noop, entropic, llmlingua)
+│   ├── factoring/                # Multi-breakpoint prompt cache hierarchy
+│   ├── prefix/                   # Deterministic context ordering for cache hits
+│   └── cache/                    # Extraction result caching (memory, s3, redis)
+│
 ├── persistence/                  # Pluggable storage backends
 │   ├── protocols.py              # IPersistenceBackend Protocol
 │   ├── file_backend.py           # Local JSON file storage
@@ -159,6 +167,7 @@ src/scout_ai/
 - **Prompt registry**: `get_prompt("aps", "indexing", "DETECT_TOC_PROMPT")` lazy-loads from `prompts/templates/aps/indexing.py`.
 - **Pluggable inference**: `IInferenceBackend` Protocol with built-in `RealTimeBackend`. External backends (Bedrock Batch, IDP) loaded via dotted-path factory. Switch with `SCOUT_LLM_INFERENCE_BACKEND` env var.
 - **Pluggable persistence**: `IPersistenceBackend` Protocol with file, S3, and memory implementations.
+- **Context engineering**: Four independent modules (prefix stabilization, compression, factoring, caching) in `context/` — all disabled by default, enabled via `SCOUT_*` env vars. Each follows the Protocol + factory + config pattern. See `CONTEXT_ENGINEERING.md` for full reference.
 - All LLM interaction in legacy path goes through `LLMClient.complete()` / `complete_batch()`.
 - The indexer has a fallback cascade: heuristic → Mode 1 → Mode 2 → Mode 3, each progressively more LLM-dependent.
 - Integration tests mock the OpenAI API at the HTTP level using `respx`.
@@ -178,6 +187,10 @@ All settings use pydantic-settings with env var prefixes:
 | `SCOUT_TOKENIZER_` | `TokenizerConfig` | Counter method |
 | `SCOUT_OBSERVABILITY_` | `ObservabilityConfig` | Tracing, OTLP endpoint, log level |
 | `SCOUT_PDF_` | `PDFFormattingConfig` | PDF output formatting (page size, fonts, watermark) |
+| `SCOUT_COMPRESSION_` | `CompressionConfig` | Context compression (method, target ratio) |
+| `SCOUT_PREFIX_` | `PrefixConfig` | Prefix stabilization (sort strategy) |
+| `SCOUT_CONTEXT_CACHE_` | `ContextCacheConfig` | Extraction result caching (backend, TTL) |
+| `SCOUT_CACHING_` | `CachingConfig` (extended) | Multi-breakpoint prompt cache hierarchy |
 
 ### Deployment Targets
 
@@ -190,6 +203,7 @@ All settings use pydantic-settings with env var prefixes:
 
 - `tests/fakes/fake_model.py` — `FakeStrandsModel`: canned responses, call recording, Strands streaming events
 - `tests/fakes/fake_persistence.py` — `FakePersistenceBackend`: dict-backed IPersistenceBackend
+- `tests/fakes/fake_context_cache.py` — `FakeContextCache`: dict-backed IContextCache
 
 ## Code Style
 

@@ -71,12 +71,13 @@ class TokenCounter:
     def _count_tiktoken(self, text: str, model: str) -> int:
         import tiktoken
 
-        if model not in _tiktoken_cache:
+        cache_key = f"{model}:{self._fallback_encoding}"
+        if cache_key not in _tiktoken_cache:
             try:
-                _tiktoken_cache[model] = tiktoken.encoding_for_model(model)
+                _tiktoken_cache[cache_key] = tiktoken.encoding_for_model(model)
             except KeyError:
-                _tiktoken_cache[model] = tiktoken.get_encoding(self._fallback_encoding)
-        enc = _tiktoken_cache[model]
+                _tiktoken_cache[cache_key] = tiktoken.get_encoding(self._fallback_encoding)
+        enc = _tiktoken_cache[cache_key]
         return len(enc.encode(text))  # type: ignore[union-attr]
 
     @staticmethod
