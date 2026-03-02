@@ -18,16 +18,12 @@ def count_tokens(text: str, tool_context: ToolContext) -> str:
     Returns:
         JSON string with token_count.
     """
+    from scout_ai.core.config import TokenizerConfig
     from scout_ai.providers.pageindex.tokenizer import TokenCounter
 
     settings = tool_context.invocation_state.get("settings")
-    if settings:
-        method = settings.tokenizer.method
-        model = settings.tokenizer.model
-    else:
-        method = "approximate"
-        model = "gpt-4o"
+    tok_cfg = settings.tokenizer if settings else TokenizerConfig()
 
-    tc = TokenCounter(method=method, model=model)
+    tc = TokenCounter(method=tok_cfg.method, model=tok_cfg.model)
     count = tc.count(text)
     return json.dumps({"token_count": count})

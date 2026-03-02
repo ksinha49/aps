@@ -35,6 +35,13 @@ def enrich_nodes(  # type: ignore[assignment]
     Returns:
         JSON with enrichment instructions and nodes to process.
     """
+    settings = tool_context.invocation_state.get("settings")  # type: ignore[union-attr]
+    summary_max_chars = 4000
+    classification_max_chars = 500
+    if settings:
+        summary_max_chars = settings.indexing.summary_max_chars
+        classification_max_chars = settings.indexing.classification_max_chars
+
     nodes_for_summary = []
     nodes_for_classification = []
 
@@ -44,7 +51,7 @@ def enrich_nodes(  # type: ignore[assignment]
             nodes_for_summary.append({
                 "node_id": node.get("node_id", ""),
                 "title": node.get("title", ""),
-                "text_preview": text[:4000],
+                "text_preview": text[:summary_max_chars],
                 "text_length": len(text),
             })
 
@@ -52,7 +59,7 @@ def enrich_nodes(  # type: ignore[assignment]
             nodes_for_classification.append({
                 "node_id": node.get("node_id", ""),
                 "title": node.get("title", ""),
-                "content_preview": text[:500],
+                "content_preview": text[:classification_max_chars],
             })
 
     result: dict[str, Any] = {

@@ -2,8 +2,8 @@
   "family": "scout-ai",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "1024",
-  "memory": "2048",
+  "cpu": "${ECS_CPU:-1024}",
+  "memory": "${ECS_MEMORY:-2048}",
   "executionRoleArn": "${EXECUTION_ROLE_ARN}",
   "taskRoleArn": "${TASK_ROLE_ARN}",
   "containerDefinitions": [
@@ -28,7 +28,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/scout-ai",
-          "awslogs-region": "us-west-2",
+          "awslogs-region": "${AWS_REGION:-us-west-2}",
           "awslogs-stream-prefix": "ecs"
         }
       },

@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 USER 1001
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "scout_ai.api.app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "uvicorn scout_ai.api.app:app --host 0.0.0.0 --port ${SCOUT_API_PORT:-8080}"]

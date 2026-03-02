@@ -23,7 +23,15 @@ spec:
             - name: SCOUT_LLM_PROVIDER
               value: "bedrock"
             - name: SCOUT_LLM_AWS_REGION
-              value: "us-west-2"
+              valueFrom:
+                configMapKeyRef:
+                  name: scout-ai-config
+                  key: aws-region
+            - name: SCOUT_API_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: scout-ai-config
+                  key: api-port
             - name: SCOUT_PERSISTENCE_BACKEND
               value: "s3"
             - name: SCOUT_PERSISTENCE_S3_BUCKET

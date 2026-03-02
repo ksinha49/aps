@@ -152,7 +152,7 @@ class ScoutIndexer(IIngestionProvider):
         # Try medical heuristic first
         if self._classifier:
             heuristic_sections = self._classifier.detect_sections_heuristic(pages)
-            if len(heuristic_sections) >= 3:
+            if len(heuristic_sections) >= self._settings.min_heuristic_sections:
                 log.info(
                     "Using heuristic sections (%d found)",
                     len(heuristic_sections),
@@ -362,33 +362,14 @@ class ScoutIndexer(IIngestionProvider):
         }
 
     async def _detect_page_numbers_in_toc(self, toc_content: str) -> str:
-        prompt = f"""Detect if there are page numbers/indices in this table of contents.
-
-Given text: {toc_content}
-
-Return JSON:
-{{"thinking": "<reasoning>", "page_index_given_in_toc": "<yes or no>"}}
-Directly return JSON only."""
+        prompt = self._get_prompt("DETECT_PAGE_NUMBERS_PROMPT").format(toc_content=toc_content)
         response = await self._client.complete(prompt)
         parsed = self._client.extract_json(response)
         return parsed.get("page_index_given_in_toc", "no")
 
     async def _toc_transformer(self, toc_content: str) -> list[dict[str, Any]]:
         """Transform raw TOC text into structured JSON."""
-        prompt = f"""Transform this table of contents into JSON format.
-
-structure is the hierarchy index (1, 1.1, 1.2, 2, etc.).
-
-Return JSON:
-{{"table_of_contents": [
-    {{"structure": "<x.x.x>", "title": "<section title>", "page": <page_number or null>}},
-    ...
-]}}
-
-Given table of contents:
-{toc_content}
-
-Directly return the final JSON structure. Do not output anything else."""
+        prompt = self._get_prompt("TOC_TRANSFORM_PROMPT").format(toc_content=toc_content)
 
         content, finish_reason = await self._client.complete_with_finish_reason(prompt)
 
@@ -399,14 +380,10 @@ Directly return the final JSON structure. Do not output anything else."""
             return parsed if isinstance(parsed, list) else []
 
         # Handle truncated output with continuation
-        for _ in range(3):
-            cont_prompt = f"""Continue the table of contents JSON structure.
-
-Raw TOC: {toc_content}
-
-Incomplete JSON so far: {content}
-
-Continue directly from where it was cut off."""
+        for _ in range(self._settings.toc_continuation_attempts):
+            cont_prompt = self._get_prompt("TOC_CONTINUE_PROMPT").format(
+                toc_content=toc_content, content=content,
+            )
             new_content, finish_reason = await self._client.complete_with_finish_reason(cont_prompt)
             content += new_content
             if finish_reason == "finished":
@@ -422,17 +399,9 @@ Continue directly from where it was cut off."""
     ) -> list[dict[str, Any]]:
         """Map TOC entries to physical page indices using document content."""
         toc_no_page = [{k: v for k, v in item.items() if k != "page"} for item in toc_json]
-        prompt = f"""Add physical_index to each TOC entry based on where sections appear in the document pages.
-
-Pages use <physical_index_X> tags. Only add physical_index for sections found in provided pages.
-
-Table of contents: {json.dumps(toc_no_page, indent=2)}
-Document pages: {content}
-
-Return JSON array:
-[{{"structure": "<>", "title": "<>", "physical_index": "<physical_index_X>"}}]
-
-Directly return JSON only."""
+        prompt = self._get_prompt("EXTRACT_TOC_INDICES_PROMPT").format(
+            toc_no_page=json.dumps(toc_no_page, indent=2), content=content,
+        )
         response = await self._client.complete(prompt)
         result = self._client.extract_json(response)
         return result if isinstance(result, list) else []
@@ -441,18 +410,9 @@ Directly return JSON only."""
         self, part: str, structure: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Fill in physical_index for TOC entries that appear in a page group."""
-        prompt = f"""Check if sections from the structure appear in the document pages.
-
-Pages use <physical_index_X> tags. Add physical_index for sections found.
-
-Current Document Pages:
-{part}
-
-Given Structure:
-{json.dumps(structure, indent=2)}
-
-Return the full structure with physical_index added where found.
-Directly return JSON only."""
+        prompt = self._get_prompt("ADD_PAGE_NUMBERS_PROMPT").format(
+            part=part, structure=json.dumps(structure, indent=2),
+        )
         response = await self._client.complete(prompt)
         result = self._client.extract_json(response)
         return result if isinstance(result, list) else structure
@@ -593,13 +553,9 @@ Directly return JSON only."""
 
                 # Search in range
                 search_content = get_text_of_pages(pages, prev_pi, next_pi, with_labels=True)
-                prompt = f"""Find the physical page where this section starts.
-
-Section Title: {item['title']}
-Document pages: {search_content}
-
-Return JSON: {{"physical_index": "<physical_index_X>"}}
-Directly return JSON only."""
+                prompt = self._get_prompt("FIX_INCORRECT_TOC_PROMPT").format(
+                    title=item['title'], search_content=search_content,
+                )
                 response = await self._client.complete(prompt)
                 parsed = self._client.extract_json(response)
                 new_pi = convert_physical_index_to_int(parsed.get("physical_index"))
@@ -655,14 +611,17 @@ Directly return JSON only."""
         all_nodes = flatten_nodes(tree)
         sem = asyncio.Semaphore(self._settings.retrieval_max_concurrent)
 
+        summary_max = self._settings.summary_max_chars
+        classification_max = self._settings.classification_max_chars
+
         async def _summarize(node: TreeNode) -> None:
             if not node.text:
                 return
             if self._tc.count(node.text) < 200:
-                node.summary = node.text[:500]
+                node.summary = node.text[:classification_max]
                 return
             async with sem:
-                prompt = self._get_prompt("GENERATE_SUMMARY_PROMPT").format(text=node.text[:4000])
+                prompt = self._get_prompt("GENERATE_SUMMARY_PROMPT").format(text=node.text[:summary_max])
                 node.summary = await self._client.complete(prompt)
 
         await asyncio.gather(*[_summarize(n) for n in all_nodes], return_exceptions=True)
@@ -671,8 +630,9 @@ Directly return JSON only."""
         """Classify all nodes by medical section type."""
         if not self._classifier:
             return
+        classification_max = self._settings.classification_max_chars
         for node in flatten_nodes(tree):
-            node.content_type = await self._classifier.classify(node.title, node.text[:500])
+            node.content_type = await self._classifier.classify(node.title, node.text[:classification_max])
 
     async def _generate_doc_description(self, tree: list[TreeNode]) -> str:
         """Generate a one-sentence document description."""

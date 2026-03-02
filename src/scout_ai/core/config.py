@@ -53,6 +53,9 @@ class IndexingConfig(BaseSettings):
     max_recursion_depth: int = 10
     max_group_tokens: int = 20_000
     summary_max_chars: int = 4000
+    classification_max_chars: int = 500
+    toc_continuation_attempts: int = 3
+    min_heuristic_sections: int = 3
 
 
 class EnrichmentConfig(BaseSettings):
@@ -125,6 +128,8 @@ class TokenizerConfig(BaseSettings):
 
     method: Literal["approximate", "tiktoken", "transformers"] = "approximate"
     model: str = "gpt-4o"
+    char_to_token_ratio: int = 4
+    fallback_encoding: str = "cl100k_base"
 
 
 class PromptConfig(BaseSettings):
@@ -254,6 +259,39 @@ class AuthConfig(BaseSettings):
     api_keys: list[str] = Field(default_factory=list)
 
 
+class ResilienceConfig(BaseSettings):
+    """Circuit breaker and failure handling configuration.
+
+    Env vars use ``SCOUT_RESILIENCE_`` prefix::
+
+        export SCOUT_RESILIENCE_CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+        export SCOUT_RESILIENCE_CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60.0
+    """
+
+    model_config = {"env_prefix": "SCOUT_RESILIENCE_"}
+
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_recovery_timeout: float = 60.0
+    checkpoint_key_prefix: str = "_checkpoint/"
+    dead_letter_key_prefix: str = "_dead_letter/"
+
+
+class APIConfig(BaseSettings):
+    """API metadata configuration.
+
+    Env vars use ``SCOUT_API_`` prefix::
+
+        export SCOUT_API_TITLE="My App"
+        export SCOUT_API_PORT=9090
+    """
+
+    model_config = {"env_prefix": "SCOUT_API_"}
+
+    title: str = "Scout AI by Ameritas"
+    description: str = "Vectorless RAG system with hierarchical tree indexes"
+    port: int = 8080
+
+
 class StageModelConfig(BaseSettings):
     """Per-pipeline-stage model overrides.
 
@@ -312,6 +350,8 @@ class AppSettings(BaseSettings):
     pdf: PDFFormattingConfig = PDFFormattingConfig()
     rules: RulesConfig = RulesConfig()
     auth: AuthConfig = AuthConfig()
+    resilience: ResilienceConfig = ResilienceConfig()
+    api: APIConfig = APIConfig()
     index_queue_url: str = Field(
         default="",
         description="SQS queue URL for async indexing. Set SCOUT_INDEX_QUEUE_URL to enable.",

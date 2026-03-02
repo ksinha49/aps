@@ -22,8 +22,9 @@ class DeadLetterHook:
     inspected and replayed later.
     """
 
-    def __init__(self, backend: IPersistenceBackend) -> None:
+    def __init__(self, backend: IPersistenceBackend, key_prefix: str = "_dead_letter/") -> None:
         self._backend = backend
+        self._key_prefix = key_prefix
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         from strands.hooks.events import AfterToolCallEvent
@@ -41,7 +42,7 @@ class DeadLetterHook:
         pipeline_id = invocation_state.get("pipeline_id", "default")
 
         timestamp = int(time.time() * 1000)
-        key = f"_dead_letter/{pipeline_id}/{tool_name}/{timestamp}"
+        key = f"{self._key_prefix}{pipeline_id}/{tool_name}/{timestamp}"
 
         entry = {
             "tool_name": tool_name,
@@ -59,7 +60,7 @@ class DeadLetterHook:
 
     def list_dead_letters(self, pipeline_id: str = "") -> list[dict[str, Any]]:
         """List all dead letter entries, optionally filtered by pipeline."""
-        prefix = f"_dead_letter/{pipeline_id}" if pipeline_id else "_dead_letter/"
+        prefix = f"{self._key_prefix}{pipeline_id}" if pipeline_id else self._key_prefix
         entries = []
         for key in self._backend.list_keys(prefix):
             try:

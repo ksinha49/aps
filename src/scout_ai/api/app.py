@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -9,10 +10,18 @@ from fastapi import Depends, FastAPI
 
 from scout_ai.api.auth import require_auth
 from scout_ai.api.routes import extract, feedback, health, index, index_async, retrieve
-from scout_ai.core.config import AppSettings
+from scout_ai.core.config import APIConfig, AppSettings
 from scout_ai.core.startup_checks import validate_settings
 from scout_ai.hooks import setup_logging, setup_tracing
 from scout_ai.prompts import configure as configure_prompts
+
+
+def _get_version() -> str:
+    """Read package version from installed metadata, with dev fallback."""
+    try:
+        return importlib.metadata.version("scout-ai")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0-dev"
 
 
 @asynccontextmanager
@@ -40,10 +49,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
 
+_api_config = APIConfig()
+
 app = FastAPI(
-    title="Scout AI by Ameritas",
-    description="Vectorless RAG system with hierarchical tree indexes",
-    version="0.2.0",
+    title=_api_config.title,
+    description=_api_config.description,
+    version=_get_version(),
     lifespan=lifespan,
 )
 

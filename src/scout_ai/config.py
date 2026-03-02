@@ -38,6 +38,10 @@ class ScoutSettings(BaseSettings):
     max_tokens_per_node: int = 20_000
     max_recursion_depth: int = 10
     max_group_tokens: int = 20_000
+    summary_max_chars: int = 4000
+    classification_max_chars: int = 500
+    toc_continuation_attempts: int = 3
+    min_heuristic_sections: int = 3
 
     # ── Node enrichment ──────────────────────────────────────────────
     enable_node_summaries: bool = True

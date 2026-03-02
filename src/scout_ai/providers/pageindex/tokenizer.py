@@ -26,9 +26,13 @@ class TokenCounter:
         self,
         method: Literal["approximate", "tiktoken", "transformers"] = "approximate",
         model: str = "gpt-4o",
+        char_to_token_ratio: int = 4,
+        fallback_encoding: str = "cl100k_base",
     ) -> None:
         self.method = method
         self.model = model
+        self._char_to_token_ratio = char_to_token_ratio
+        self._fallback_encoding = fallback_encoding
 
         if method == "tiktoken":
             try:
@@ -61,19 +65,17 @@ class TokenCounter:
 
     # ── Backends ─────────────────────────────────────────────────────
 
-    @staticmethod
-    def _count_approximate(text: str) -> int:
-        return max(1, len(text) // 4)
+    def _count_approximate(self, text: str) -> int:
+        return max(1, len(text) // self._char_to_token_ratio)
 
-    @staticmethod
-    def _count_tiktoken(text: str, model: str) -> int:
+    def _count_tiktoken(self, text: str, model: str) -> int:
         import tiktoken
 
         if model not in _tiktoken_cache:
             try:
                 _tiktoken_cache[model] = tiktoken.encoding_for_model(model)
             except KeyError:
-                _tiktoken_cache[model] = tiktoken.get_encoding("cl100k_base")
+                _tiktoken_cache[model] = tiktoken.get_encoding(self._fallback_encoding)
         enc = _tiktoken_cache[model]
         return len(enc.encode(text))  # type: ignore[union-attr]
 

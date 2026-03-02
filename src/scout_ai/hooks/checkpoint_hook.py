@@ -20,8 +20,9 @@ class CheckpointHook:
     Enables resuming a pipeline from the last successful step after a crash.
     """
 
-    def __init__(self, backend: IPersistenceBackend) -> None:
+    def __init__(self, backend: IPersistenceBackend, key_prefix: str = "_checkpoint/") -> None:
         self._backend = backend
+        self._key_prefix = key_prefix
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         from strands.hooks.events import AfterToolCallEvent
@@ -37,7 +38,7 @@ class CheckpointHook:
         pipeline_id = invocation_state.get("pipeline_id", "default")
         tool_name = getattr(event, "tool_name", "unknown")
 
-        key = f"_checkpoint/{pipeline_id}/{tool_name}"
+        key = f"{self._key_prefix}{pipeline_id}/{tool_name}"
         result = getattr(event, "result", None)
 
         try:
@@ -49,7 +50,7 @@ class CheckpointHook:
 
     def load_checkpoint(self, pipeline_id: str, tool_name: str) -> dict[str, Any] | None:
         """Load a checkpoint for a specific pipeline step."""
-        key = f"_checkpoint/{pipeline_id}/{tool_name}"
+        key = f"{self._key_prefix}{pipeline_id}/{tool_name}"
         if not self._backend.exists(key):
             return None
         try:
@@ -59,6 +60,6 @@ class CheckpointHook:
 
     def clear_checkpoints(self, pipeline_id: str) -> None:
         """Remove all checkpoints for a pipeline run."""
-        prefix = f"_checkpoint/{pipeline_id}/"
+        prefix = f"{self._key_prefix}{pipeline_id}/"
         for key in self._backend.list_keys(prefix):
             self._backend.delete(key)

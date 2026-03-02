@@ -13,78 +13,15 @@ import logging
 from typing import Any
 
 from scout_ai.config import ScoutSettings
+from scout_ai.core.config import ExtractionConfig
 from scout_ai.interfaces.chat import IChatProvider
 from scout_ai.models import Citation, ExtractionQuestion, ExtractionResult
 from scout_ai.providers.pageindex.client import LLMClient
 
 log = logging.getLogger(__name__)
 
-TIER1_BATCH_SIZE = 20
-
-_DEFAULT_SYSTEM_TEMPLATE = (
-    "You are extracting information from a document.\n"
-    "Answer each question based ONLY on the provided context. If the answer is not found, say \"Not found\".\n\n"
-    "Document Context:\n{context}"
-)
-
-_CACHED_BATCH_PROMPT = """Questions:
-{questions}
-
-For each question, return:
-{{
-    "answers": [
-        {{
-            "question_id": "<id>",
-            "answer": "<extracted answer or 'Not found'>",
-            "confidence": <0.0 to 1.0>,
-            "citations": [
-                {{
-                    "page_number": <exact page number from [Page N] markers>,
-                    "section_title": "<section name from section headers>",
-                    "section_type": "<section type from section headers>",
-                    "verbatim_quote": "<exact quote copied from the source text>"
-                }}
-            ]
-        }},
-        ...
-    ]
-}}
-
-IMPORTANT: Each citation must include:
-- The exact page number where the evidence appears (use the [Page N] markers in the context)
-- The section title and type (from the [Section: ... | Type: ...] headers)
-- A verbatim quote copied exactly from the source text — do not paraphrase
-
-Directly return the final JSON structure. Do not output anything else."""
-
-_CACHED_INDIVIDUAL_PROMPT = """Question: {question}
-
-Think step-by-step:
-1. Identify which parts of the context are relevant
-2. Cross-reference dates, providers, and findings
-3. Synthesize the answer
-
-Return JSON:
-{{
-    "reasoning": "<step by step analysis>",
-    "answer": "<extracted answer or 'Not found'>",
-    "confidence": <0.0 to 1.0>,
-    "citations": [
-        {{
-            "page_number": <exact page number from [Page N] markers>,
-            "section_title": "<section name from section headers>",
-            "section_type": "<section type from section headers>",
-            "verbatim_quote": "<exact quote copied from the source text>"
-        }}
-    ]
-}}
-
-IMPORTANT: Each citation must include:
-- The exact page number where the evidence appears (use the [Page N] markers in the context)
-- The section title and type (from the [Section: ... | Type: ...] headers)
-- A verbatim quote copied exactly from the source text — do not paraphrase
-
-Directly return the final JSON structure. Do not output anything else."""
+# Reads SCOUT_EXTRACTION_TIER1_BATCH_SIZE env var; defaults to 20
+TIER1_BATCH_SIZE: int = ExtractionConfig().tier1_batch_size
 
 
 class ScoutChat(IChatProvider):
@@ -106,8 +43,21 @@ class ScoutChat(IChatProvider):
         self._cache_enabled = cache_enabled
         self._batch_extraction_prompt = batch_extraction_prompt or ""
         self._individual_extraction_prompt = individual_extraction_prompt or ""
-        self._system_template = system_template or _DEFAULT_SYSTEM_TEMPLATE
         self._domain = domain
+
+        # Lazy-load system template from registry if not provided
+        if not system_template:
+            from scout_ai.prompts.registry import get_prompt
+
+            try:
+                system_template = get_prompt(self._domain, "extraction", "EXTRACTION_SYSTEM_TEMPLATE")
+            except KeyError:
+                system_template = get_prompt("base", "extraction_agent", "EXTRACTION_SYSTEM_TEMPLATE")
+        self._system_template = system_template
+
+        # Cached prompt attributes (lazy-loaded from registry on first use)
+        self._cached_batch_prompt: str = ""
+        self._cached_individual_prompt: str = ""
 
     async def extract_answers(
         self,
@@ -276,7 +226,18 @@ Provide a detailed answer based only on the provided context."""
 
         if system_prompt:
             # Caching path: context is in system prompt, user message has only questions
-            prompt = _CACHED_BATCH_PROMPT.format(questions=questions_text)
+            if not self._cached_batch_prompt:
+                from scout_ai.prompts.registry import get_prompt
+
+                try:
+                    self._cached_batch_prompt = get_prompt(
+                        self._domain, "extraction", "CACHED_BATCH_EXTRACTION_PROMPT",
+                    )
+                except KeyError:
+                    self._cached_batch_prompt = get_prompt(
+                        "base", "extraction_agent", "CACHED_BATCH_EXTRACTION_PROMPT",
+                    )
+            prompt = self._cached_batch_prompt.format(questions=questions_text)
         else:
             # Legacy path: context + questions in a single user message
             if not self._batch_extraction_prompt:
@@ -334,7 +295,18 @@ Provide a detailed answer based only on the provided context."""
         formatted_q = self._format_question(question).lstrip("- ")
         if system_prompt:
             # Caching path: context is in system prompt
-            prompt = _CACHED_INDIVIDUAL_PROMPT.format(question=formatted_q)
+            if not self._cached_individual_prompt:
+                from scout_ai.prompts.registry import get_prompt
+
+                try:
+                    self._cached_individual_prompt = get_prompt(
+                        self._domain, "extraction", "CACHED_INDIVIDUAL_EXTRACTION_PROMPT",
+                    )
+                except KeyError:
+                    self._cached_individual_prompt = get_prompt(
+                        "base", "extraction_agent", "CACHED_INDIVIDUAL_EXTRACTION_PROMPT",
+                    )
+            prompt = self._cached_individual_prompt.format(question=formatted_q)
         else:
             # Legacy path
             if not self._individual_extraction_prompt:

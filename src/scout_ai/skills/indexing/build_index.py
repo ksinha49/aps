@@ -18,6 +18,7 @@ from typing import Any
 from strands import tool
 from strands.types.tools import ToolContext
 
+from scout_ai.core.config import TokenizerConfig
 from scout_ai.models import DocumentIndex, PageContent
 from scout_ai.providers.pageindex.tokenizer import TokenCounter
 from scout_ai.providers.pageindex.tree_builder import TreeBuilder
@@ -60,13 +61,8 @@ def build_index(  # type: ignore[assignment]
         return json.dumps({"error": "No pages provided"})
 
     # Populate token counts
-    tokenizer_method = "approximate"
-    tokenizer_model = "gpt-4o"
-    if settings:
-        tokenizer_method = settings.tokenizer.method
-        tokenizer_model = settings.tokenizer.model
-
-    tc = TokenCounter(method=tokenizer_method, model=tokenizer_model)
+    tok_cfg = settings.tokenizer if settings else TokenizerConfig()
+    tc = TokenCounter(method=tok_cfg.method, model=tok_cfg.model)
     for p in pages:
         if p.token_count is None:
             p.token_count = tc.count(p.text)
@@ -121,13 +117,8 @@ def assemble_index(
     Returns:
         Complete DocumentIndex ready for persistence.
     """
-    tokenizer_method = "approximate"
-    tokenizer_model = "gpt-4o"
-    if settings:
-        tokenizer_method = settings.tokenizer.method
-        tokenizer_model = settings.tokenizer.model
-
-    tc = TokenCounter(method=tokenizer_method, model=tokenizer_model)
+    tok_cfg = settings.tokenizer if settings else TokenizerConfig()
+    tc = TokenCounter(method=tok_cfg.method, model=tok_cfg.model)
     builder = TreeBuilder(tc)
 
     # Build tree from validated TOC items

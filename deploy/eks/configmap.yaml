@@ -4,3 +4,5 @@ metadata:
   name: scout-ai-config
 data:
   s3-bucket: "scout-ai-indexes"
+  aws-region: "us-west-2"
+  api-port: "8080"
